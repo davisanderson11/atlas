@@ -1,0 +1,24 @@
+{
+  "name": "monolith",
+  "version": "1.0.0",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/genai": "^1.8.0",
+    "@nut-tree-fork/libnut": "^4.2.6",
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "@todesktop/robotjs-prebuild": "^0.6.27",
+    "dotenv": "^17.0.1"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0"
+  },
+  "description": ""
+}
