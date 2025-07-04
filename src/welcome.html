@@ -418,12 +418,13 @@
     /* Toggle switch */
     .toggle-switch {
       position: relative;
-      width: 48px;
+      width: 44px;
       height: 24px;
       background: rgba(255, 255, 255, 0.2);
       border-radius: 12px;
       cursor: pointer;
       transition: all 0.3s ease;
+      overflow: hidden; /* Ensure slider stays within bounds */
     }
     
     .toggle-switch.active {
@@ -443,7 +444,8 @@
     }
     
     .toggle-switch.active .toggle-slider {
-      transform: translateX(24px);
+      left: 22px; /* 44px - 20px - 2px = 22px */
+      transform: none; /* Use left position instead of transform */
     }
     
     .setting-note {
