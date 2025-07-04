@@ -13,10 +13,16 @@ import {
   desktopCapturer
 } from 'electron';
 import { GoogleGenAI } from '@google/genai';
+import { homedir } from 'os';
 
 // Derive __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Set custom cache directory to avoid Windows permission issues
+const userDataPath = join(homedir(), '.atlas');
+app.setPath('userData', userDataPath);
+app.setPath('cache', join(userDataPath, 'cache'));
 
 console.log('[main.js] loading...');
 
@@ -26,6 +32,113 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 let overlayWindow;
 let captureWindow;
 let welcomeWindow;
+
+/**
+ * Detect if text is structured data
+ */
+function detectStructuredData(text) {
+  const lines = text.trim().split('\n').filter(line => line.trim());
+  
+  // JSON detection first (most specific)
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed === 'object') {
+      return { type: 'json', data: parsed };
+    }
+  } catch (e) {}
+  
+  // SQL result detection (simple table format)
+  if (text.includes('|') && lines.length > 2) {
+    const hasTableStructure = lines.some(line => /[|\-]{2,}/.test(line));
+    if (hasTableStructure) {
+      return { type: 'sql', data: parseSQLTable(text) };
+    }
+  }
+  
+  // CSV detection - more flexible
+  if (lines.length > 1) {
+    const firstLineCommas = (lines[0].match(/,/g) || []).length;
+    if (firstLineCommas > 0) {
+      // Allow some flexibility - at least 75% of lines should have similar comma count
+      const validLines = lines.filter(line => {
+        const commaCount = (line.match(/,/g) || []).length;
+        return Math.abs(commaCount - firstLineCommas) <= 1;
+      });
+      
+      if (validLines.length >= lines.length * 0.75) {
+        return { type: 'csv', data: parseCSV(text) };
+      }
+    }
+  }
+  
+  // Tab-separated values
+  if (lines.length > 1 && text.includes('\t')) {
+    const firstLineTabs = (lines[0].match(/\t/g) || []).length;
+    if (firstLineTabs > 0) {
+      return { type: 'tsv', data: parseTSV(text) };
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Parse CSV text into data structure
+ */
+function parseCSV(text) {
+  const lines = text.trim().split('\n').filter(line => line.trim());
+  if (lines.length === 0) return null;
+  
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+  const rows = lines.slice(1).map(line => {
+    const values = line.split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+    return headers.reduce((obj, header, i) => {
+      obj[header] = values[i] || '';
+      return obj;
+    }, {});
+  });
+  
+  console.log('[CSV Parsed]:', { headers, rows });
+  return { headers, rows };
+}
+
+/**
+ * Parse TSV text into data structure
+ */
+function parseTSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split('\t').map(h => h.trim());
+  const rows = lines.slice(1).map(line => {
+    const values = line.split('\t').map(v => v.trim());
+    return headers.reduce((obj, header, i) => {
+      obj[header] = values[i] || '';
+      return obj;
+    }, {});
+  });
+  return { headers, rows };
+}
+
+/**
+ * Parse SQL-style table into data structure
+ */
+function parseSQLTable(text) {
+  const lines = text.trim().split('\n');
+  const dataLines = lines.filter(line => !line.match(/^\s*\|?\s*-+\s*\|/));
+  
+  if (dataLines.length < 2) return null;
+  
+  const parseRow = (line) => line.split('|').map(cell => cell.trim()).filter(cell => cell);
+  const headers = parseRow(dataLines[0]);
+  const rows = dataLines.slice(1).map(line => {
+    const values = parseRow(line);
+    return headers.reduce((obj, header, i) => {
+      obj[header] = values[i] || '';
+      return obj;
+    }, {});
+  });
+  
+  return { headers, rows };
+}
 
 /**
  * Build AI prompt based on selected text
@@ -94,8 +207,8 @@ function buildPrompt(text) {
 let originalSelectedText = '';
 let lastScreenshotData = null; // Store screenshot base64 data for follow-ups
 
-function createOverlay(text) {
-  console.log('[createOverlay]:', text);
+function createOverlay(content) {
+  console.log('[createOverlay]:', typeof content === 'string' ? content : content.type);
   
   // If window exists, close it and wait a bit
   if (overlayWindow && !overlayWindow.isDestroyed()) {
@@ -106,7 +219,7 @@ function createOverlay(text) {
     }
     overlayWindow = null;
     // Small delay to ensure window is fully closed
-    return setTimeout(() => createOverlay(text), 100);
+    return setTimeout(() => createOverlay(content), 100);
   }
   const { width: sw } = screen.getPrimaryDisplay().workAreaSize;
   const w = 860, h = 600;
@@ -140,9 +253,13 @@ function createOverlay(text) {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     overlayWindow.loadFile(join(__dirname, 'index.html'));
     overlayWindow.webContents.once('did-finish-load', () => {
-      console.log('[Sending text to overlay]:', text);
+      console.log('[Sending content to overlay]:', typeof content === 'string' ? 'text' : 'visualization');
       if (overlayWindow && !overlayWindow.isDestroyed()) {
-        overlayWindow.webContents.send('overlay-text', text);
+        if (typeof content === 'string') {
+          overlayWindow.webContents.send('overlay-text', content);
+        } else {
+          overlayWindow.webContents.send('overlay-data', content);
+        }
       }
     });
   }
@@ -199,23 +316,40 @@ async function summarizeSelection() {
     // Restore original clipboard content
     clipboard.writeText(originalClipboard);
 
-    const prompt = buildPrompt(selectedText);
-    console.log('[Prompt]:', prompt);
-
-    let aiResponse;
-    try {
-      const result = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
-        contents: prompt
+    // Check if it's structured data
+    console.log('[Checking for structured data in]:', selectedText);
+    const structuredData = detectStructuredData(selectedText);
+    console.log('[Detection result]:', structuredData);
+    
+    if (structuredData) {
+      console.log('[Structured data detected]:', structuredData.type);
+      // For structured data, pass both the data and a visualization flag
+      createOverlay({
+        type: 'visualization',
+        dataType: structuredData.type,
+        data: structuredData.data,
+        originalText: selectedText
       });
-      aiResponse = result.text.trim();
-      console.log('[AI responded]');
-    } catch (error) {
-      console.error('[AI error]:', error);
-      aiResponse = `API Error: ${error.message}`;
-    }
+    } else {
+      // Regular text processing
+      const prompt = buildPrompt(selectedText);
+      console.log('[Prompt]:', prompt);
 
-    createOverlay(aiResponse);
+      let aiResponse;
+      try {
+        const result = await ai.models.generateContent({
+          model: 'gemini-1.5-flash',
+          contents: prompt
+        });
+        aiResponse = result.text.trim();
+        console.log('[AI responded]');
+      } catch (error) {
+        console.error('[AI error]:', error);
+        aiResponse = `API Error: ${error.message}`;
+      }
+
+      createOverlay(aiResponse);
+    }
     
   } catch (error) {
     console.error('[Copy error]:', error);

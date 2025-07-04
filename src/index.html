@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@mdi/font@7.2.96/css/materialdesignicons.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     * {
       -webkit-app-region: no-drag;
@@ -197,6 +198,110 @@
     #content::-webkit-scrollbar-thumb:hover {
       background: rgba(255, 255, 255, 0.3);
     }
+    
+    /* Visualization styles */
+    #viz-container {
+      display: none;
+      margin-bottom: 16px;
+    }
+    
+    .viz-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    
+    .viz-type {
+      font-size: 12px;
+      color: #707070;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .viz-controls {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .viz-btn {
+      padding: 4px 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.1);
+      color: #a0a0a0;
+      font-size: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .viz-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #e0e0e0;
+    }
+    
+    .viz-btn.active {
+      background: rgba(102, 126, 234, 0.3);
+      border-color: rgba(102, 126, 234, 0.5);
+      color: #e0e0e0;
+    }
+    
+    #chart-canvas {
+      max-height: 300px;
+      margin-bottom: 12px;
+      display: none;
+    }
+    
+    #table-container,
+    #raw-container {
+      display: none;
+    }
+    
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      max-height: 300px;
+      overflow-y: auto;
+      display: block;
+    }
+    
+    .data-table th,
+    .data-table td {
+      padding: 8px 12px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .data-table th {
+      background: rgba(255, 255, 255, 0.05);
+      color: #a0a0a0;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    
+    .data-table td {
+      color: #e0e0e0;
+    }
+    
+    .data-table tr:hover td {
+      background: rgba(255, 255, 255, 0.03);
+    }
+    
+    .json-viewer {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      padding: 12px;
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      max-height: 300px;
+      overflow: auto;
+      color: #e0e0e0;
+    }
   </style>
 </head>
 <body>
@@ -206,6 +311,19 @@
       <button id="close" title="Close">×</button>
     </div>
     <div id="content">Loading…</div>
+    <div id="viz-container">
+      <div class="viz-header">
+        <span class="viz-type">Data Visualization</span>
+        <div class="viz-controls">
+          <button class="viz-btn active" onclick="showChart()">Chart</button>
+          <button class="viz-btn" onclick="showTable()">Table</button>
+          <button class="viz-btn" onclick="showRaw()">Raw</button>
+        </div>
+      </div>
+      <canvas id="chart-canvas" width="800" height="300"></canvas>
+      <div id="table-container"></div>
+      <div id="raw-container"></div>
+    </div>
     <div id="expand-hint">Read more</div>
     <div id="more">
       <label for="followup">Ask a follow-up:</label>
@@ -217,9 +335,17 @@
     // Listen for AI response text from main via IPC
     const contentEl = document.getElementById('content');
     const expandHint = document.getElementById('expand-hint');
+    const vizContainer = document.getElementById('viz-container');
+    const chartCanvas = document.getElementById('chart-canvas');
+    const tableContainer = document.getElementById('table-container');
+    const rawContainer = document.getElementById('raw-container');
+    
     contentEl.innerText = 'Loading...';
     
     let isExpanded = false;
+    let currentChart = null;
+    let currentData = null;
+    let currentView = 'chart';
     
     function checkIfTruncated() {
       // Check if content overflows
@@ -305,6 +431,211 @@
         }
       }
     });
+    
+    // Handle structured data visualization
+    window.overlayAPI.onData((data) => {
+      console.log('[Received data]:', data);
+      currentData = data;
+      
+      // Hide text content and show viz container
+      contentEl.style.display = 'none';
+      vizContainer.style.display = 'block';
+      expandHint.style.display = 'none';
+      
+      // Update title based on data type
+      const titleEl = document.querySelector('#title');
+      const vizTypeEl = document.querySelector('.viz-type');
+      
+      switch(data.dataType) {
+        case 'csv':
+          titleEl.innerHTML = '<i class="mdi mdi-table"></i>CSV Data';
+          vizTypeEl.textContent = 'CSV Visualization';
+          break;
+        case 'json':
+          titleEl.innerHTML = '<i class="mdi mdi-code-json"></i>JSON Data';
+          vizTypeEl.textContent = 'JSON Visualization';
+          break;
+        case 'sql':
+          titleEl.innerHTML = '<i class="mdi mdi-database"></i>SQL Results';
+          vizTypeEl.textContent = 'SQL Table Visualization';
+          break;
+        case 'tsv':
+          titleEl.innerHTML = '<i class="mdi mdi-table"></i>TSV Data';
+          vizTypeEl.textContent = 'TSV Visualization';
+          break;
+      }
+      
+      // Default to chart view for tabular data, raw view for JSON
+      if (data.dataType === 'json') {
+        showRaw();
+      } else {
+        showChart();
+      }
+    });
+    
+    // Visualization view switching functions - make them global
+    window.showChart = function() {
+      currentView = 'chart';
+      updateViewButtons();
+      
+      chartCanvas.style.display = 'block';
+      tableContainer.style.display = 'none';
+      rawContainer.style.display = 'none';
+      
+      if (currentData && currentData.data && currentData.data.headers) {
+        renderChart(currentData.data);
+      }
+    }
+    
+    window.showTable = function() {
+      currentView = 'table';
+      updateViewButtons();
+      
+      chartCanvas.style.display = 'none';
+      tableContainer.style.display = 'block';
+      rawContainer.style.display = 'none';
+      
+      if (currentData && currentData.data) {
+        renderTable(currentData.data);
+      }
+    }
+    
+    window.showRaw = function() {
+      currentView = 'raw';
+      updateViewButtons();
+      
+      chartCanvas.style.display = 'none';
+      tableContainer.style.display = 'none';
+      rawContainer.style.display = 'block';
+      
+      if (currentData) {
+        renderRaw(currentData.originalText);
+      }
+    }
+    
+    function updateViewButtons() {
+      document.querySelectorAll('.viz-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      
+      if (currentView === 'chart') {
+        document.querySelector('.viz-btn:nth-child(1)').classList.add('active');
+      } else if (currentView === 'table') {
+        document.querySelector('.viz-btn:nth-child(2)').classList.add('active');
+      } else {
+        document.querySelector('.viz-btn:nth-child(3)').classList.add('active');
+      }
+    }
+    
+    function renderChart(data) {
+      if (currentChart) {
+        currentChart.destroy();
+      }
+      
+      const ctx = chartCanvas.getContext('2d');
+      const headers = data.headers;
+      const rows = data.rows;
+      
+      // Try to detect numeric columns
+      const numericColumns = headers.filter((header, index) => {
+        return rows.every(row => !isNaN(parseFloat(row[header])));
+      });
+      
+      if (numericColumns.length === 0) {
+        // No numeric data, show a message
+        chartCanvas.style.display = 'none';
+        tableContainer.innerHTML = '<p style="color: #a0a0a0; text-align: center;">No numeric data found for charting. Use Table view instead.</p>';
+        tableContainer.style.display = 'block';
+        return;
+      }
+      
+      // Use first column as labels, numeric columns as datasets
+      const labels = rows.map(row => row[headers[0]]);
+      const datasets = numericColumns.map((col, i) => ({
+        label: col,
+        data: rows.map(row => parseFloat(row[col])),
+        backgroundColor: `hsla(${i * 60 + 200}, 70%, 50%, 0.6)`,
+        borderColor: `hsla(${i * 60 + 200}, 70%, 50%, 1)`,
+        borderWidth: 1
+      }));
+      
+      currentChart = new Chart(ctx, {
+        type: rows.length > 10 ? 'line' : 'bar',
+        data: {
+          labels: labels,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: {
+                color: '#e0e0e0'
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: {
+                color: '#a0a0a0'
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.1)'
+              }
+            },
+            y: {
+              ticks: {
+                color: '#a0a0a0'
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.1)'
+              }
+            }
+          }
+        }
+      });
+    }
+    
+    function renderTable(data) {
+      if (data && data.headers && data.rows) {
+        let html = '<table class="data-table"><thead><tr>';
+        
+        // Headers
+        data.headers.forEach(header => {
+          html += `<th>${escapeHtml(header)}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+        
+        // Rows
+        data.rows.forEach(row => {
+          html += '<tr>';
+          data.headers.forEach(header => {
+            html += `<td>${escapeHtml(String(row[header] || ''))}</td>`;
+          });
+          html += '</tr>';
+        });
+        
+        html += '</tbody></table>';
+        tableContainer.innerHTML = html;
+      } else if (Array.isArray(data)) {
+        // JSON array
+        tableContainer.innerHTML = '<div class="json-viewer">' + escapeHtml(JSON.stringify(data, null, 2)) + '</div>';
+      } else {
+        // JSON object
+        tableContainer.innerHTML = '<div class="json-viewer">' + escapeHtml(JSON.stringify(data, null, 2)) + '</div>';
+      }
+    }
+    
+    function renderRaw(text) {
+      rawContainer.innerHTML = `<div class="json-viewer">${escapeHtml(text)}</div>`;
+    }
+    
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
     
     // Handle mouse events for click-through
     const container = document.getElementById('container');
