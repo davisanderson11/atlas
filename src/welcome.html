@@ -31,8 +31,68 @@
       overflow: hidden;
       user-select: none;
       display: flex;
+      flex-direction: column;
+    }
+    
+    /* Custom title bar */
+    #titlebar {
+      height: 32px;
+      background: rgba(30, 30, 30, 0.98);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 16px;
+      -webkit-app-region: drag;
+      flex-shrink: 0;
+    }
+    
+    #titlebar-title {
+      font-size: 13px;
+      color: #a0a0a0;
+      font-weight: 500;
+    }
+    
+    #titlebar-controls {
+      display: flex;
+      gap: 12px;
+      -webkit-app-region: no-drag;
+    }
+    
+    .titlebar-button {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    
+    .titlebar-button:hover {
+      opacity: 0.8;
+    }
+    
+    #minimize-btn {
+      background: #f4bf4f;
+    }
+    
+    #maximize-btn {
+      background: #61c554;
+    }
+    
+    #close-btn {
+      background: #ec6a5e;
+    }
+    
+    /* Main content wrapper */
+    #main-content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
       align-items: center;
       justify-content: center;
+      padding: 40px 20px;
     }
     
     #container {
@@ -42,6 +102,24 @@
       border-radius: 16px;
       padding: 40px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+    
+    /* Scrollbar styling */
+    #main-content::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    #main-content::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+    }
+    
+    #main-content::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+    }
+    
+    #main-content::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
     }
     
     #header {
@@ -203,13 +281,25 @@
   </style>
 </head>
 <body>
-  <div id="container">
-    <div id="header">
-      <div id="title">
-        <i class="mdi mdi-cube-outline"></i>
-        <span>Atlas</span>
-      </div>
+  <!-- Custom title bar -->
+  <div id="titlebar">
+    <div id="titlebar-title">Atlas</div>
+    <div id="titlebar-controls">
+      <button class="titlebar-button" id="minimize-btn" onclick="window.welcomeAPI.minimizeWindow()"></button>
+      <button class="titlebar-button" id="maximize-btn" onclick="window.welcomeAPI.maximizeWindow()"></button>
+      <button class="titlebar-button" id="close-btn" onclick="window.welcomeAPI.closeWindow()"></button>
     </div>
+  </div>
+  
+  <!-- Main scrollable content -->
+  <div id="main-content">
+    <div id="container">
+      <div id="header">
+        <div id="title">
+          <i class="mdi mdi-cube-outline"></i>
+          <span>Atlas</span>
+        </div>
+      </div>
     
     <p class="subtitle">
       Your AI-powered assistant for instant text analysis and screenshot understanding
@@ -263,11 +353,12 @@
       <span class="status-text">Running in background</span>
     </div>
     
-    <button class="button" onclick="window.close()">Hide Window</button>
+    <button class="button" onclick="window.welcomeAPI.closeWindow()">Hide Window</button>
     
     <div class="footer">
       Atlas will continue running in the background.<br>
       To quit completely, use your system's force quit option.
+    </div>
     </div>
   </div>
 </body>

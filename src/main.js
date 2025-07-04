@@ -556,16 +556,18 @@ function createWelcomeWindow() {
     height: 700,
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      preload: join(__dirname, 'welcome-preload.js')
     },
     center: true,
     resizable: true,
     minimizable: true,
     maximizable: true,
+    frame: false,
+    transparent: true,
     title: 'Atlas',
     show: false,
-    backgroundColor: '#1a1a1a',
-    titleBarStyle: 'default'
+    backgroundColor: '#1a1a1a'
   });
 
   welcomeWindow.loadFile(join(__dirname, 'welcome.html'));
@@ -580,6 +582,29 @@ function createWelcomeWindow() {
     console.log('[Welcome window closed, app continues running]');
   });
 }
+
+// Welcome window controls
+ipcMain.on('welcome-minimize', () => {
+  if (welcomeWindow && !welcomeWindow.isDestroyed()) {
+    welcomeWindow.minimize();
+  }
+});
+
+ipcMain.on('welcome-maximize', () => {
+  if (welcomeWindow && !welcomeWindow.isDestroyed()) {
+    if (welcomeWindow.isMaximized()) {
+      welcomeWindow.unmaximize();
+    } else {
+      welcomeWindow.maximize();
+    }
+  }
+});
+
+ipcMain.on('welcome-close', () => {
+  if (welcomeWindow && !welcomeWindow.isDestroyed()) {
+    welcomeWindow.close();
+  }
+});
 
 // App lifecycle
 app.whenReady().then(() => {
