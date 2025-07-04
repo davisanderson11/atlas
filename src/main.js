@@ -25,6 +25,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 let overlayWindow;
 let captureWindow;
+let welcomeWindow;
 
 /**
  * Build AI prompt based on selected text
@@ -299,9 +300,48 @@ Follow-up question: ${question}`;
   }
 });
 
+/**
+ * Create welcome window
+ */
+function createWelcomeWindow() {
+  welcomeWindow = new BrowserWindow({
+    width: 900,
+    height: 700,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    },
+    center: true,
+    resizable: true,
+    minimizable: true,
+    maximizable: true,
+    title: 'Atlas',
+    show: false,
+    backgroundColor: '#1a1a1a',
+    titleBarStyle: 'default'
+  });
+
+  welcomeWindow.loadFile(join(__dirname, 'welcome.html'));
+  
+  welcomeWindow.once('ready-to-show', () => {
+    welcomeWindow.show();
+  });
+
+  // Don't quit app when welcome window is closed
+  welcomeWindow.on('closed', () => {
+    welcomeWindow = null;
+    console.log('[Welcome window closed, app continues running]');
+  });
+}
+
 // App lifecycle
 app.whenReady().then(() => {
   console.log('[App ready]');
+  
+  // Create welcome window on launch
+  createWelcomeWindow();
+  
+  // Register global shortcut
   const registered = globalShortcut.register('CommandOrControl+Shift+Enter', summarizeSelection);
   console.log('[Shortcut registered]:', registered);
 });
