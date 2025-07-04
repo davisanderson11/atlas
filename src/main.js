@@ -92,7 +92,7 @@ let originalSelectedText = '';
 
 function createOverlay(text) {
   console.log('[createOverlay]:', text);
-  if (overlayWindow) {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
     overlayWindow.close();
     overlayWindow = null;
   }
@@ -101,8 +101,12 @@ function createOverlay(text) {
   const x = Math.round((sw - w) / 2), y = 10;
   overlayWindow = new BrowserWindow({
     x, y, width: w, height: h,
-    frame: false, alwaysOnTop: true,
-    skipTaskbar: true, transparent: true,
+    frame: false, 
+    alwaysOnTop: true,
+    skipTaskbar: true, 
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
     webPreferences: { 
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
