@@ -1,6 +1,6 @@
 {
-  "name": "monolith",
-  "version": "1.0.0",
+  "name": "atlas",
+  "version": "0.1.0",
   "main": "src/main.js",
   "type": "module",
   "scripts": {
