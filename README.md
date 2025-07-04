@@ -1,4 +1,4 @@
-# Atlas - AI-Powered Desktop Assistant
+# Atlas - Gemini AI Desktop Assistant
 
 Atlas is an AI-powered desktop assistant that provides instant text analysis, data visualization, math solving, screenshot understanding, and screen activity review capabilities through simple keyboard shortcuts.
 
