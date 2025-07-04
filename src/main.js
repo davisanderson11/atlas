@@ -91,6 +91,7 @@ function buildPrompt(text) {
  */
 // Store original context for follow-ups
 let originalSelectedText = '';
+let lastScreenshotData = null; // Store screenshot base64 data for follow-ups
 
 function createOverlay(text) {
   console.log('[createOverlay]:', text);
@@ -192,6 +193,7 @@ async function summarizeSelection() {
     
     // Store original text for follow-ups
     originalSelectedText = selectedText;
+    lastScreenshotData = null; // Clear any previous screenshot data
     
     // Restore original clipboard content
     clipboard.writeText(originalClipboard);
@@ -245,6 +247,9 @@ ipcMain.on('overlay-close', () => {
     overlayWindow.close();
     overlayWindow = null;
   }
+  // Clear screenshot data when closing overlay
+  lastScreenshotData = null;
+  originalSelectedText = '';
 });
 
 // Handle mouse event ignoring
@@ -258,12 +263,34 @@ ipcMain.on('set-ignore-mouse-events', (event, ignore) => {
 ipcMain.handle('overlay-followup', async (_, question) => {
   console.log('[Follow-up question]:', question);
   console.log('[Original context]:', originalSelectedText);
+  console.log('[Has screenshot data]:', lastScreenshotData !== null);
+  
   try {
+    let contents;
+    
+    if (lastScreenshotData && originalSelectedText === '[Screenshot]') {
+      // If we have screenshot data, include it in the follow-up
+      contents = [{
+        parts: [
+          { text: `This is a follow-up question about the screenshot you just analyzed.\n\nFollow-up question: ${question}` },
+          {
+            inlineData: {
+              mimeType: 'image/png',
+              data: lastScreenshotData
+            }
+          }
+        ]
+      }];
+    } else {
+      // Text-based follow-up
+      contents = `Original text that was selected: "${originalSelectedText}"
+
+Follow-up question: ${question}`;
+    }
+    
     const result = await ai.models.generateContent({
       model: 'gemini-1.5-flash',
-      contents: `Original text that was selected: "${originalSelectedText}"
-
-Follow-up question: ${question}`
+      contents: contents
     });
     return result.text.trim();
   } catch (error) {
@@ -387,6 +414,7 @@ async function processScreenshot(base64Image, bounds) {
     
     // Store for follow-ups
     originalSelectedText = '[Screenshot]';
+    lastScreenshotData = base64Image; // Store the actual screenshot data
     
     createOverlay(text);
   } catch (error) {
