@@ -208,7 +208,8 @@ let originalSelectedText = '';
 let lastScreenshotData = null; // Store screenshot base64 data for follow-ups
 
 function createOverlay(content) {
-  console.log('[createOverlay]:', typeof content === 'string' ? content : content.type);
+  console.log('[createOverlay] called with:', typeof content === 'string' ? 'text' : 'data object');
+  console.log('[createOverlay] content type:', typeof content === 'string' ? 'string' : content.type);
   
   // If window exists, close it and wait a bit
   if (overlayWindow && !overlayWindow.isDestroyed()) {
@@ -251,6 +252,7 @@ function createOverlay(content) {
   }
   
   if (overlayWindow && !overlayWindow.isDestroyed()) {
+    console.log('[Overlay window created successfully]');
     overlayWindow.loadFile(join(__dirname, 'index.html'));
     overlayWindow.webContents.once('did-finish-load', () => {
       console.log('[Sending content to overlay]:', typeof content === 'string' ? 'text' : 'visualization');
@@ -260,8 +262,11 @@ function createOverlay(content) {
         } else {
           overlayWindow.webContents.send('overlay-data', content);
         }
+        console.log('[Content sent to overlay]');
       }
     });
+  } else {
+    console.error('[Failed to create overlay window]');
   }
 }
 
@@ -273,6 +278,9 @@ async function summarizeSelection() {
   
   // Store current clipboard content
   const originalClipboard = clipboard.readText();
+  
+  // Clear clipboard first to ensure we can detect new content
+  clipboard.clear();
   
   // Get the focused window to send copy command
   const focusedWindow = BrowserWindow.getFocusedWindow();
@@ -296,24 +304,27 @@ async function summarizeSelection() {
     await new Promise(resolve => setTimeout(resolve, 150));
     
     // Read the potentially new clipboard content
-    const newClipboard = clipboard.readText().trim();
-    console.log('[Clipboard after copy attempt]:', JSON.stringify(newClipboard));
+    const newClipboard = clipboard.readText();
+    console.log('[Original clipboard]:', JSON.stringify(originalClipboard));
+    console.log('[New clipboard]:', JSON.stringify(newClipboard));
     
     // Check if clipboard changed (meaning text was selected and copied)
-    if (!newClipboard || newClipboard === originalClipboard) {
+    if (!newClipboard || newClipboard.length === 0) {
       // No new text was copied - trigger screenshot mode
       console.log('[No text selected - starting screen capture]');
+      // Restore original clipboard before screenshot
+      clipboard.writeText(originalClipboard);
       return startScreenCapture();
     }
     
     // We have new text that was selected
-    const selectedText = newClipboard;
+    const selectedText = newClipboard.trim();
     
     // Store original text for follow-ups
     originalSelectedText = selectedText;
     lastScreenshotData = null; // Clear any previous screenshot data
     
-    // Restore original clipboard content
+    // Restore original clipboard content immediately
     clipboard.writeText(originalClipboard);
 
     // Check if it's structured data
@@ -330,6 +341,8 @@ async function summarizeSelection() {
         data: structuredData.data,
         originalText: selectedText
       });
+      console.log('[Overlay created for visualization]');
+      return; // Make sure we exit here
     } else {
       // Regular text processing
       const prompt = buildPrompt(selectedText);
