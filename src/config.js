@@ -25,6 +25,6 @@ export const config = {
   // Keyboard Shortcuts
   shortcuts: {
     main: 'CommandOrControl+Shift+Enter',
-    rewind: 'CommandOrControl+Shift+Quote' // Ctrl+Shift+' or Cmd+Shift+'
+    rewind: "CommandOrControl+Shift+'" // Ctrl+Shift+' or Cmd+Shift+'
   }
 };
