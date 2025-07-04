@@ -9,8 +9,9 @@ export class RewindHandler {
     this.frameBuffer = [];
     this.isRecording = false;
     this.captureInterval = null;
-    this.maxFrames = 100; // 10 seconds at 10 FPS
-    this.fps = 10; // Frames per second
+    this.maxFrames = 6; // Keep 6 frames
+    this.captureIntervalMs = 1700; // Capture every 1.7 seconds (10 seconds / 6 frames)
+    this.captureInProgress = false; // Prevent overlapping captures
   }
 
   /**
@@ -22,14 +23,26 @@ export class RewindHandler {
     console.log('[RewindHandler] Starting frame capture');
     this.isRecording = true;
     
-    // Capture frames at regular intervals
-    this.captureInterval = setInterval(async () => {
-      try {
-        await this.captureFrame();
-      } catch (error) {
-        console.error('[RewindHandler] Frame capture error:', error);
+    // Use setTimeout instead of setInterval for better control
+    const captureLoop = async () => {
+      if (!this.isRecording) return;
+      
+      if (!this.captureInProgress) {
+        try {
+          await this.captureFrame();
+        } catch (error) {
+          console.error('[RewindHandler] Frame capture error:', error);
+        }
       }
-    }, 1000 / this.fps); // Capture every 100ms for 10 FPS
+      
+      // Schedule next capture
+      if (this.isRecording) {
+        setTimeout(captureLoop, this.captureIntervalMs);
+      }
+    };
+    
+    // Start the capture loop
+    captureLoop();
   }
 
   /**
@@ -51,14 +64,19 @@ export class RewindHandler {
    * Capture a single frame
    */
   async captureFrame() {
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const { width, height } = primaryDisplay.bounds;
+    if (this.captureInProgress) return;
+    
+    this.captureInProgress = true;
+    
+    try {
+      const primaryDisplay = screen.getPrimaryDisplay();
+      const { width, height } = primaryDisplay.bounds;
     
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: {
-        width: Math.floor(width / 2), // Half resolution for memory efficiency
-        height: Math.floor(height / 2)
+        width: Math.min(1280, Math.floor(width / 2)), // Higher resolution
+        height: Math.min(720, Math.floor(height / 2))   // 720p max
       }
     });
     
@@ -75,6 +93,9 @@ export class RewindHandler {
       if (this.frameBuffer.length > this.maxFrames) {
         this.frameBuffer.shift();
       }
+    }
+    } finally {
+      this.captureInProgress = false;
     }
   }
 
@@ -97,8 +118,7 @@ export class RewindHandler {
     // Return the frames and metadata
     return {
       frames: this.frameBuffer,
-      duration: this.frameBuffer.length / this.fps,
-      fps: this.fps,
+      duration: 10, // Always approximately 10 seconds
       frameCount: this.frameBuffer.length
     };
   }
@@ -115,18 +135,27 @@ export class RewindHandler {
     
     console.log(`[RewindHandler] Processing ${rewindData.frameCount} frames with question: ${userQuestion}`);
     
-    // Take key frames for analysis (first, middle, last, and a few in between)
-    const keyFrameIndices = this.selectKeyFrames(rewindData.frames.length);
-    const keyFrames = keyFrameIndices.map(i => rewindData.frames[i]);
+    // Use all frames since we're only keeping 6
+    const keyFrames = rewindData.frames;
     
     // Create a composite prompt with multiple frames
     const parts = [
       {
-        text: `I'm showing you ${keyFrames.length} key frames from the last ${rewindData.duration.toFixed(1)} seconds of screen activity.
-        
-User's question: "${userQuestion}"
+        text: `User's question: "${userQuestion}"
 
-Please analyze these frames in sequence and answer the user's question about what happened. Focus on changes between frames and any relevant details that help answer their specific question.`
+I'm showing you ${keyFrames.length} screenshots from the last 10 seconds. Please provide a CONCISE SUMMARY that directly answers the user's question.
+
+DO NOT:
+- Describe each frame individually
+- Mention frame numbers
+- Speculate about details you can't clearly see
+- Add information that isn't visible
+
+DO:
+- Give a brief overview of what happened
+- Focus only on elements relevant to the user's question
+- Mention specific text, errors, or UI elements only if clearly visible
+- Keep your response short and direct`
       }
     ];
     
@@ -158,25 +187,7 @@ Please analyze these frames in sequence and answer the user's question about wha
     }
   }
 
-  /**
-   * Select key frames for analysis
-   */
-  selectKeyFrames(totalFrames) {
-    if (totalFrames <= 5) {
-      // If 5 or fewer frames, use all
-      return Array.from({ length: totalFrames }, (_, i) => i);
-    }
-    
-    // Otherwise, select up to 5 key frames evenly distributed
-    const indices = [];
-    const step = (totalFrames - 1) / 4; // 5 frames total (including first and last)
-    
-    for (let i = 0; i < 5; i++) {
-      indices.push(Math.round(i * step));
-    }
-    
-    return indices;
-  }
+  // Removed selectKeyFrames - no longer needed since we keep exactly what we need
 
   /**
    * Check if we should pause recording (privacy)

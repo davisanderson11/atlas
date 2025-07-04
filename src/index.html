@@ -569,6 +569,9 @@
 
     // Close overlay on × click
     document.getElementById('close').addEventListener('click', () => {
+      // Clear any stored rewind data
+      window.rewindData = null;
+      window.rewindResponse = null;
       window.overlayAPI.closeOverlay();
     });
 
@@ -594,8 +597,31 @@
             label.textContent = 'Ask a follow-up:';
             followupInput.placeholder = 'Type your question…';
             
-            // Clear rewind data
-            window.rewindData = null;
+            // Don't clear rewind data yet - keep it for follow-ups
+            // window.rewindData = null;
+            
+            // Store the rewind response as original context
+            window.rewindResponse = result;
+          } catch (err) {
+            updateContent('Error: ' + err.message);
+          }
+          return;
+        }
+        
+        // Check if we had a previous rewind response (for follow-ups after rewind)
+        if (window.rewindResponse && !currentData) {
+          contentEl.innerHTML = '<span class="loading-spinner"></span>Thinking<span class="loading-dots"></span>';
+          
+          try {
+            // Process as a regular follow-up with the rewind context
+            const followUpPrompt = `Previous context: User asked about the last 10 seconds of screen activity and I provided this analysis:
+"${window.rewindResponse}"
+
+Follow-up question: ${question}`;
+            
+            const reply = await window.overlayAPI.askFollowUp(followUpPrompt);
+            updateContent(reply);
+            followupInput.value = '';
           } catch (err) {
             updateContent('Error: ' + err.message);
           }
