@@ -419,35 +419,44 @@ app.whenReady().then(() => {
   const mainRegistered = globalShortcut.register(config.shortcuts.main, summarizeSelection);
   console.log('[Main shortcut registered]:', mainRegistered);
   
-  const rewindRegistered = globalShortcut.register(config.shortcuts.rewind, triggerRewind);
-  console.log('[Rewind shortcut registered]:', rewindRegistered);
+  // Only register rewind shortcut if feature is enabled
+  if (config.features.rewind.enabled) {
+    const rewindRegistered = globalShortcut.register(config.shortcuts.rewind, triggerRewind);
+    console.log('[Rewind shortcut registered]:', rewindRegistered);
+    
+    // Start rewind recording
+    rewindHandler.startRecording();
+  } else {
+    console.log('[Rewind feature disabled]');
+  }
   
-  // Start rewind recording
-  rewindHandler.startRecording();
-  
-  // Monitor active window for privacy
-  setInterval(() => {
-    const focusedWindow = BrowserWindow.getFocusedWindow();
-    if (focusedWindow && focusedWindow !== welcomeWindow && focusedWindow !== overlayWindow) {
-      const title = focusedWindow.getTitle();
-      if (rewindHandler.shouldPauseRecording(title)) {
-        console.log('[Privacy] Pausing recording for sensitive app:', title);
-        rewindHandler.clearBuffer();
+  // Monitor active window for privacy (only if rewind is enabled)
+  if (config.features.rewind.enabled) {
+    setInterval(() => {
+      const focusedWindow = BrowserWindow.getFocusedWindow();
+      if (focusedWindow && focusedWindow !== welcomeWindow && focusedWindow !== overlayWindow) {
+        const title = focusedWindow.getTitle();
+        if (rewindHandler.shouldPauseRecording(title)) {
+          console.log('[Privacy] Pausing recording for sensitive app:', title);
+          rewindHandler.clearBuffer();
+        }
       }
-    }
-  }, 1000); // Check every second
+    }, 1000); // Check every second
+  }
 });
 
 app.on('window-all-closed', e => e.preventDefault());
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
-  rewindHandler.stopRecording();
+  if (config.features.rewind.enabled) {
+    rewindHandler.stopRecording();
+  }
 });
 
 /**
  * Trigger rewind mode
  */
-function triggerRewind() {
+async function triggerRewind() {
   console.log('[Rewind triggered]');
   
   // Check if we have frames in buffer
@@ -461,9 +470,20 @@ function triggerRewind() {
   
   console.log(`[Rewind has ${rewindData.frameCount} frames]`);
   
-  // Show overlay in rewind mode
-  createOverlay({
-    type: 'rewind',
-    rewindData: rewindData
-  });
+  // Show loading overlay immediately
+  createOverlay('Analyzing the last 10 seconds...');
+  
+  try {
+    // Process with default prompt
+    const result = await rewindHandler.processRewind('What happened in the last 10 seconds? Summarize the key activities and any notable changes.');
+    
+    // Store for follow-ups
+    originalSelectedText = `[Rewind: ${result.duration.toFixed(1)}s of activity]`;
+    
+    // Show the result
+    createOverlay(result.response);
+  } catch (error) {
+    console.error('[Rewind error]:', error);
+    createOverlay(`Error analyzing activity: ${error.message}`);
+  }
 }

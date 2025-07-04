@@ -9,6 +9,15 @@ export const config = {
     // maxTokens: 1000,
   },
   
+  // Feature Flags
+  features: {
+    rewind: {
+      enabled: process.env.ENABLE_REWIND === 'true' || false, // Disabled by default
+      bufferDuration: 10, // seconds
+      maxFrames: 30
+    }
+  },
+  
   // Window Configuration
   window: {
     overlay: {

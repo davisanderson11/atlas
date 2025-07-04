@@ -581,32 +581,7 @@
       if (e.key === 'Enter' && followupInput.value.trim()) {
         const question = followupInput.value.trim();
         
-        // Check if we're in rewind mode
-        if (window.rewindData) {
-          // Process rewind with the question
-          contentEl.innerHTML = '<span class="loading-spinner"></span>Analyzing the last 10 seconds<span class="loading-dots"></span>';
-          contentEl.style.display = 'block';
-          
-          try {
-            const result = await window.overlayAPI.processRewind(question);
-            updateContent(result);
-            followupInput.value = '';
-            
-            // Update label back to normal
-            const label = document.getElementById('more').querySelector('label');
-            label.textContent = 'Ask a follow-up:';
-            followupInput.placeholder = 'Type your question…';
-            
-            // Don't clear rewind data yet - keep it for follow-ups
-            // window.rewindData = null;
-            
-            // Store the rewind response as original context
-            window.rewindResponse = result;
-          } catch (err) {
-            updateContent('Error: ' + err.message);
-          }
-          return;
-        }
+        // Note: Rewind mode now processes automatically, no need for manual input
         
         // Check if we had a previous rewind response (for follow-ups after rewind)
         if (window.rewindResponse && !currentData) {
