@@ -1,4 +1,4 @@
-// Rewind handler - captures last 10 seconds of screen activity
+// Rewind handler - captures screen activity with smart quality selection
 
 import { desktopCapturer, screen } from 'electron';
 import { config } from '../config.js';
@@ -8,36 +8,43 @@ export class RewindHandler {
     this.ai = ai;
     this.frameBuffer = [];
     this.isRecording = false;
-    this.captureInterval = null;
-    this.maxFrames = 6; // Keep 6 frames
-    this.captureIntervalMs = 1700; // Capture every 1.7 seconds (10 seconds / 6 frames)
-    this.captureInProgress = false; // Prevent overlapping captures
+    this.maxFrames = 30; // Keep last 30 frames (mix of low and high quality)
+    this.captureInProgress = false;
+    
+    // Change detection
+    this.lastFrame = null;
+    this.lastChangeTime = 0;
+    this.changeThreshold = 0.08; // 8% change threshold
+    
+    // Timing
+    this.lowQualityInterval = 500; // Capture low quality every 500ms
+    this.minTimeBetweenHighQuality = 300; // Min 300ms between high quality captures
   }
 
   /**
-   * Start continuous frame capture
+   * Start continuous recording
    */
   async startRecording() {
     if (this.isRecording) return;
     
-    console.log('[RewindHandler] Starting frame capture');
+    console.log('[RewindHandler] Starting smart capture');
     this.isRecording = true;
     
-    // Use setTimeout instead of setInterval for better control
+    // Regular low-quality capture loop
     const captureLoop = async () => {
       if (!this.isRecording) return;
       
       if (!this.captureInProgress) {
         try {
-          await this.captureFrame();
+          await this.captureAndCheck();
         } catch (error) {
-          console.error('[RewindHandler] Frame capture error:', error);
+          console.error('[RewindHandler] Capture error:', error);
         }
       }
       
       // Schedule next capture
       if (this.isRecording) {
-        setTimeout(captureLoop, this.captureIntervalMs);
+        setTimeout(captureLoop, this.lowQualityInterval);
       }
     };
     
@@ -46,79 +53,165 @@ export class RewindHandler {
   }
 
   /**
-   * Stop frame capture
+   * Stop recording
    */
   stopRecording() {
     if (!this.isRecording) return;
     
-    console.log('[RewindHandler] Stopping frame capture');
+    console.log('[RewindHandler] Stopping capture');
     this.isRecording = false;
-    
-    if (this.captureInterval) {
-      clearInterval(this.captureInterval);
-      this.captureInterval = null;
-    }
   }
 
   /**
-   * Capture a single frame
+   * Capture frame and check for changes
    */
-  async captureFrame() {
+  async captureAndCheck() {
     if (this.captureInProgress) return;
-    
     this.captureInProgress = true;
     
     try {
       const primaryDisplay = screen.getPrimaryDisplay();
       const { width, height } = primaryDisplay.bounds;
-    
-    const sources = await desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: {
-        width: Math.min(1280, Math.floor(width / 2)), // Higher resolution
-        height: Math.min(720, Math.floor(height / 2))   // 720p max
-      }
-    });
-    
-    if (sources.length > 0) {
-      const frame = {
-        timestamp: Date.now(),
-        image: sources[0].thumbnail.toDataURL() // Convert to base64 data URL
-      };
       
-      // Add to circular buffer
-      this.frameBuffer.push(frame);
+      // Always capture low quality for the buffer
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: {
+          width: Math.min(640, Math.floor(width / 3)), // Low quality
+          height: Math.min(360, Math.floor(height / 3))
+        }
+      });
       
-      // Remove oldest frames if buffer is full
-      if (this.frameBuffer.length > this.maxFrames) {
-        this.frameBuffer.shift();
+      if (sources.length === 0) return;
+      
+      const currentFrame = sources[0].thumbnail;
+      const now = Date.now();
+      
+      // Check for changes
+      let isSignificantChange = false;
+      if (this.lastFrame) {
+        const changeAmount = this.calculateChange(this.lastFrame, currentFrame);
+        isSignificantChange = changeAmount > this.changeThreshold && 
+                             (now - this.lastChangeTime) > this.minTimeBetweenHighQuality;
+        
+        if (isSignificantChange) {
+          console.log(`[RewindHandler] Significant change detected: ${(changeAmount * 100).toFixed(1)}%`);
+        }
       }
-    }
+      
+      // Decide quality based on change detection
+      if (isSignificantChange) {
+        // Capture high quality for significant changes
+        this.lastChangeTime = now;
+        await this.captureHighQuality('change-detected');
+      } else {
+        // Store low quality frame
+        const frame = {
+          timestamp: now,
+          image: currentFrame.toDataURL(),
+          quality: 'low',
+          reason: 'periodic'
+        };
+        this.addFrame(frame);
+      }
+      
+      this.lastFrame = currentFrame;
+      
     } finally {
       this.captureInProgress = false;
     }
   }
 
   /**
-   * Clear the frame buffer (for privacy)
+   * Capture high quality frame
+   */
+  async captureHighQuality(reason) {
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width, height } = primaryDisplay.bounds;
+    
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: {
+        width: Math.min(1280, Math.floor(width * 0.75)), // High quality
+        height: Math.min(720, Math.floor(height * 0.75))
+      }
+    });
+    
+    if (sources.length > 0) {
+      const frame = {
+        timestamp: Date.now(),
+        image: sources[0].thumbnail.toDataURL(),
+        quality: 'high',
+        reason: reason
+      };
+      this.addFrame(frame);
+    }
+  }
+
+  /**
+   * Calculate change between two frames
+   */
+  calculateChange(frame1, frame2) {
+    const data1 = frame1.toBitmap();
+    const data2 = frame2.toBitmap();
+    
+    if (data1.length !== data2.length) return 1;
+    
+    let diffPixels = 0;
+    const totalPixels = data1.length / 4;
+    
+    // Sample every 10th pixel for performance
+    for (let i = 0; i < data1.length; i += 40) { // 4 channels * 10 pixels
+      const diff = Math.abs(data1[i] - data2[i]) + 
+                  Math.abs(data1[i+1] - data2[i+1]) + 
+                  Math.abs(data1[i+2] - data2[i+2]);
+      
+      if (diff > 50) {
+        diffPixels += 10; // Account for sampling
+      }
+    }
+    
+    return diffPixels / totalPixels;
+  }
+
+  /**
+   * Add frame to buffer
+   */
+  addFrame(frame) {
+    this.frameBuffer.push(frame);
+    
+    // Remove old frames
+    if (this.frameBuffer.length > this.maxFrames) {
+      this.frameBuffer.shift();
+    }
+    
+    console.log(`[RewindHandler] Frame added (${frame.quality}, ${frame.reason}), buffer: ${this.frameBuffer.length}`);
+  }
+
+  /**
+   * Clear the frame buffer
    */
   clearBuffer() {
     console.log('[RewindHandler] Clearing frame buffer');
     this.frameBuffer = [];
+    this.lastFrame = null;
   }
 
   /**
-   * Get the current buffer as a video-like sequence
+   * Get rewind data
    */
   getRewindData() {
     if (this.frameBuffer.length === 0) {
       return null;
     }
     
-    // Return the frames and metadata
+    const firstTime = this.frameBuffer[0].timestamp;
+    const lastTime = this.frameBuffer[this.frameBuffer.length - 1].timestamp;
+    const duration = (lastTime - firstTime) / 1000;
+    
     return {
       frames: this.frameBuffer,
-      duration: 10, // Always approximately 10 seconds
+      duration: duration,
       frameCount: this.frameBuffer.length
     };
   }
@@ -133,34 +226,44 @@ export class RewindHandler {
       throw new Error('No frames captured in buffer');
     }
     
-    console.log(`[RewindHandler] Processing ${rewindData.frameCount} frames with question: ${userQuestion}`);
+    console.log(`[RewindHandler] Processing ${rewindData.frameCount} frames over ${rewindData.duration.toFixed(1)}s`);
     
-    // Use all frames since we're only keeping 6
-    const keyFrames = rewindData.frames;
+    // Select frames to send to AI (prioritize high quality and recent)
+    const framesToAnalyze = [];
+    const highQualityFrames = rewindData.frames.filter(f => f.quality === 'high');
+    const lowQualityFrames = rewindData.frames.filter(f => f.quality === 'low');
     
-    // Create a composite prompt with multiple frames
+    // Add all high quality frames (up to 6)
+    framesToAnalyze.push(...highQualityFrames.slice(-6));
+    
+    // If we need more frames, add some low quality ones
+    if (framesToAnalyze.length < 8) {
+      const needed = 8 - framesToAnalyze.length;
+      // Get evenly distributed low quality frames
+      const step = Math.max(1, Math.floor(lowQualityFrames.length / needed));
+      for (let i = 0; i < lowQualityFrames.length && framesToAnalyze.length < 8; i += step) {
+        framesToAnalyze.push(lowQualityFrames[i]);
+      }
+    }
+    
+    // Sort by timestamp
+    framesToAnalyze.sort((a, b) => a.timestamp - b.timestamp);
+    
+    console.log(`[RewindHandler] Sending ${framesToAnalyze.length} frames (${framesToAnalyze.filter(f => f.quality === 'high').length} high quality)`);
+    
+    // Create prompt
     const parts = [
       {
         text: `User's question: "${userQuestion}"
 
-I'm showing you ${keyFrames.length} screenshots from the last 10 seconds. Please provide a CONCISE SUMMARY that directly answers the user's question.
+I'm showing you ${framesToAnalyze.length} screenshots from the last ${rewindData.duration.toFixed(1)} seconds. High-quality images were captured when significant changes occurred.
 
-DO NOT:
-- Describe each frame individually
-- Mention frame numbers
-- Speculate about details you can't clearly see
-- Add information that isn't visible
-
-DO:
-- Give a brief overview of what happened
-- Focus only on elements relevant to the user's question
-- Mention specific text, errors, or UI elements only if clearly visible
-- Keep your response short and direct`
+Please provide a CONCISE SUMMARY that directly answers the user's question. Focus on what happened, not individual frames.`
       }
     ];
     
-    // Add each key frame to the prompt
-    keyFrames.forEach((frame, index) => {
+    // Add frames
+    framesToAnalyze.forEach((frame) => {
       const base64Data = frame.image.replace(/^data:image\/png;base64,/, '');
       parts.push({
         inlineData: {
@@ -178,7 +281,8 @@ DO:
       
       return {
         response: result.text.trim(),
-        frameCount: rewindData.frameCount,
+        frameCount: framesToAnalyze.length,
+        totalFrames: rewindData.frameCount,
         duration: rewindData.duration
       };
     } catch (error) {
@@ -187,10 +291,8 @@ DO:
     }
   }
 
-  // Removed selectKeyFrames - no longer needed since we keep exactly what we need
-
   /**
-   * Check if we should pause recording (privacy)
+   * Check if we should pause recording
    */
   shouldPauseRecording(activeWindowTitle) {
     const sensitivePatterns = [
