@@ -379,6 +379,26 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+    
+    /* Compact list styling */
+    #content ul, .math-solution-content ul {
+      margin: 2px 0 !important;
+      padding-left: 20px !important;
+    }
+    
+    #content li, .math-solution-content li {
+      margin: 0 !important;
+      padding: 1px 0 !important;
+      line-height: 1.4 !important;
+    }
+    
+    #content p, .math-solution-content p {
+      margin: 4px 0 !important;
+    }
+    
+    #content br, .math-solution-content br {
+      line-height: 0.5 !important;
+    }
   </style>
 </head>
 <body>
@@ -484,7 +504,7 @@
       
       // Wrap consecutive <li> elements in <ul>
       html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => {
-        return '<ul style="margin: 8px 0; padding-left: 20px;">' + match + '</ul>';
+        return '<ul>' + match + '</ul>';
       });
       
       // Convert remaining line breaks
@@ -586,7 +606,7 @@
             const replyHtml = parseMarkdown(reply);
             if (currentData.dataType === 'math') {
               // Update solution with follow-up answer
-              tableContainer.innerHTML = `<div class="math-solution-content" style="padding: 20px; color: #e0e0e0; line-height: 1.6; overflow-y: auto; max-height: 280px;">
+              tableContainer.innerHTML = `<div class="math-solution-content" style="padding: 20px; color: #e0e0e0; line-height: 1.6;">
                 <div style="background: rgba(102, 126, 234, 0.1); border-left: 3px solid #667eea; padding: 10px; margin-bottom: 15px; border-radius: 4px;">
                   <strong style="color: #667eea;">Follow-up Question:</strong> <em>${escapeHtml(question)}</em>
                 </div>
@@ -606,7 +626,7 @@
               });
             } else {
               // For other data types, show the reply in table view
-              tableContainer.innerHTML = `<div style="padding: 20px; color: #e0e0e0; line-height: 1.8; overflow-y: auto; max-height: 280px;">
+              tableContainer.innerHTML = `<div style="padding: 20px; color: #e0e0e0; line-height: 1.6;">
                 <div style="background: rgba(102, 126, 234, 0.1); border-left: 3px solid #667eea; padding: 10px; margin-bottom: 15px; border-radius: 4px;">
                   <strong style="color: #667eea;">Follow-up Question:</strong> <em>${escapeHtml(question)}</em>
                 </div>
@@ -704,7 +724,7 @@
       if (currentData && currentData.dataType === 'math') {
         // Display the solution with LaTeX rendering
         const solutionHtml = parseMarkdown(currentData.data.solution);
-        tableContainer.innerHTML = `<div class="math-solution-content" style="padding: 20px; color: #e0e0e0; line-height: 1.6; overflow-y: auto; max-height: 280px;">${solutionHtml}</div>`;
+        tableContainer.innerHTML = `<div class="math-solution-content" style="padding: 20px; color: #e0e0e0; line-height: 1.6;">${solutionHtml}</div>`;
         
         // Render LaTeX
         renderMathInElement(tableContainer, {
