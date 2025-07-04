@@ -48,6 +48,18 @@
       overflow: hidden;
       isolation: isolate;
       -webkit-app-region: no-drag;
+      animation: fadeIn 0.2s ease-out;
+    }
+    
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
     }
     
     #header {
@@ -294,9 +306,6 @@
       width: 100%;
       border-collapse: collapse;
       font-size: 13px;
-      max-height: 300px;
-      overflow-y: auto;
-      display: block;
     }
     
     .data-table th,
@@ -334,6 +343,41 @@
       max-height: 300px;
       overflow: auto;
       color: #e0e0e0;
+    }
+    
+    /* Loading animation */
+    .loading-dots {
+      display: inline-block;
+      font-size: 18px;
+      color: #a0a0a0;
+    }
+    
+    .loading-dots::after {
+      content: '';
+      animation: dots 1.5s steps(4, end) infinite;
+    }
+    
+    @keyframes dots {
+      0% { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+      100% { content: ''; }
+    }
+    
+    .loading-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      margin-right: 8px;
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
   </style>
 </head>
@@ -373,7 +417,8 @@
     const tableContainer = document.getElementById('table-container');
     const rawContainer = document.getElementById('raw-container');
     
-    contentEl.innerText = 'Loading...';
+    // Set initial loading state with spinner
+    contentEl.innerHTML = '<span class="loading-spinner"></span>Analyzing<span class="loading-dots"></span>';
     
     let isExpanded = false;
     let currentChart = null;
@@ -472,7 +517,16 @@
     
     window.overlayAPI.onText((text) => {
       console.log('[Received text]:', text);
-      updateContent(text);
+      // Check for special loading state
+      if (text === 'LOADING') {
+        contentEl.innerHTML = '<span class="loading-spinner"></span>Analyzing<span class="loading-dots"></span>';
+        // Hide viz container and show content
+        vizContainer.style.display = 'none';
+        contentEl.style.display = 'block';
+        expandHint.style.display = 'none';
+      } else {
+        updateContent(text);
+      }
     });
     
     // Remove the old math handler since we're using the data visualization system now
@@ -513,7 +567,10 @@
     followupInput.addEventListener('keydown', async (e) => {
       if (e.key === 'Enter' && followupInput.value.trim()) {
         const question = followupInput.value.trim();
-        updateContent('Thinking...');
+        contentEl.innerHTML = '<span class="loading-spinner"></span>Thinking<span class="loading-dots"></span>';
+        contentEl.style.display = 'block';
+        vizContainer.style.display = 'none';
+        expandHint.style.display = 'none';
         try {
           const reply = await window.overlayAPI.askFollowUp(question);
           updateContent(reply);
@@ -897,6 +954,11 @@
         // Ensure yStep is reasonable
         if (yStep < 0.1) yStep = 0.1;
         if (yStep > yRange / 2) yStep = yRange / 5;
+        // Make yStep larger if we have too many grid lines
+        const gridCount = Math.ceil((yMax - yMin) / yStep);
+        if (gridCount > 20) {
+          yStep = yRange / 10;
+        }
         
         for (let y = Math.ceil(yMin / yStep) * yStep; y <= yMax; y += yStep) {
           const screenY = paddingTop + height * (1 - (y - yMin) / yRange);
@@ -950,16 +1012,24 @@
           ctx.fillText(x.toString(), screenX, paddingTop + height + 5);
         }
         
-        // Y-axis labels
+        // Y-axis labels - only show every 2nd or 3rd label to avoid crowding
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
+        let labelCount = 0;
+        const maxLabels = 8; // Maximum number of y-axis labels to show
+        const totalLabels = Math.floor((yMax - Math.ceil(yMin / yStep) * yStep) / yStep) + 1;
+        const labelSkip = Math.max(1, Math.ceil(totalLabels / maxLabels));
+        
         for (let y = Math.ceil(yMin / yStep) * yStep; y <= yMax; y += yStep) {
-          const screenY = paddingTop + height * (1 - (y - yMin) / yRange);
-          // Format the number appropriately
-          const label = Math.abs(y) < 0.01 && y !== 0 ? y.toExponential(1) : 
-                       Math.abs(y) >= 1000 ? y.toExponential(1) : 
-                       Number.isInteger(y) ? y.toString() : y.toFixed(1);
-          ctx.fillText(label, paddingLeft - 5, screenY);
+          if (labelCount % labelSkip === 0) {
+            const screenY = paddingTop + height * (1 - (y - yMin) / yRange);
+            // Format the number appropriately
+            const label = Math.abs(y) < 0.01 && y !== 0 ? y.toExponential(1) : 
+                         Math.abs(y) >= 1000 ? y.toExponential(1) : 
+                         Number.isInteger(y) ? y.toString() : y.toFixed(1);
+            ctx.fillText(label, paddingLeft - 5, screenY);
+          }
+          labelCount++;
         }
         
       } catch (error) {

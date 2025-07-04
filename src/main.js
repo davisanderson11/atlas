@@ -436,12 +436,17 @@ function createOverlay(content) {
     overlayWindow.webContents.once('did-finish-load', () => {
       console.log('[Sending content to overlay]:', typeof content === 'string' ? 'text' : content.type || 'visualization');
       if (overlayWindow && !overlayWindow.isDestroyed()) {
-        if (typeof content === 'string') {
-          overlayWindow.webContents.send('overlay-text', content);
-        } else {
-          overlayWindow.webContents.send('overlay-data', content);
-        }
-        console.log('[Content sent to overlay]');
+        // Small delay to ensure the window is ready
+        setTimeout(() => {
+          if (overlayWindow && !overlayWindow.isDestroyed()) {
+            if (typeof content === 'string') {
+              overlayWindow.webContents.send('overlay-text', content);
+            } else {
+              overlayWindow.webContents.send('overlay-data', content);
+            }
+            console.log('[Content sent to overlay]');
+          }
+        }, 50);
       }
     });
   } else {
@@ -454,6 +459,9 @@ function createOverlay(content) {
  */
 async function summarizeSelection() {
   console.log('[Hotkey pressed]');
+  
+  // Show overlay immediately with loading state
+  createOverlay('LOADING');
   
   // Store current clipboard content
   const originalClipboard = clipboard.readText();
@@ -488,11 +496,18 @@ async function summarizeSelection() {
     console.log('[New clipboard]:', JSON.stringify(newClipboard));
     
     // Check if clipboard changed (meaning text was selected and copied)
-    if (!newClipboard || newClipboard.length === 0) {
+    if (newClipboard === originalClipboard || newClipboard === '') {
       // No new text was copied - trigger screenshot mode
       console.log('[No text selected - starting screen capture]');
+      // Close the loading overlay before starting screenshot
+      if (overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow.close();
+        overlayWindow = null;
+      }
       // Restore original clipboard before screenshot
-      clipboard.writeText(originalClipboard);
+      if (originalClipboard) {
+        clipboard.writeText(originalClipboard);
+      }
       return startScreenCapture();
     }
     
@@ -616,7 +631,7 @@ Do NOT include any special formatting like "GRAPH_FUNCTION:" - just solve and ex
       }
       createOverlay(aiResponse);
     } else {
-      createOverlay('Please copy text (Ctrl+C) before pressing the hotkey.');
+      createOverlay('Please select some text and try again.');
     }
   }
 }
