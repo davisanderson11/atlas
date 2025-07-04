@@ -4,6 +4,7 @@ import { BrowserWindow, screen, desktopCapturer, ipcMain } from 'electron';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { config } from '../config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -108,7 +109,7 @@ export class ScreenshotHandler {
     
     try {
       const result = await this.ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: config.ai.model,
         contents: [{
           parts: [
             { text: 'Analyze this screenshot and explain what you see. Be concise.' },
@@ -140,7 +141,7 @@ export class ScreenshotHandler {
     
     try {
       const result = await this.ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: config.ai.model,
         contents: [{
           parts: [
             { text: `This is a follow-up question about the screenshot you just analyzed.\n\nFollow-up question: ${question}` },

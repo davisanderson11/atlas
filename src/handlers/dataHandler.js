@@ -1,5 +1,7 @@
 // Data visualization handler module for CSV, JSON, TSV, SQL tables
 
+import { config } from '../config.js';
+
 export class DataHandler {
   constructor(ai) {
     this.ai = ai;

@@ -14,7 +14,8 @@ import {
 import { GoogleGenAI } from '@google/genai';
 import { homedir } from 'os';
 
-// Import handlers
+// Import config and handlers
+import { config } from './config.js';
 import { TextHandler } from './handlers/textHandler.js';
 import { ScreenshotHandler } from './handlers/screenshotHandler.js';
 import { MathHandler } from './handlers/mathHandler.js';
@@ -66,8 +67,10 @@ function createOverlay(content) {
     return setTimeout(() => createOverlay(content), 100);
   }
   const { width: sw } = screen.getPrimaryDisplay().workAreaSize;
-  const w = 860, h = 600;
-  const x = Math.round((sw - w) / 2), y = 10;
+  const w = config.window.overlay.width;
+  const h = config.window.overlay.height;
+  const x = Math.round((sw - w) / 2);
+  const y = config.window.overlay.yOffset;
   overlayWindow = new BrowserWindow({
     x, y, width: w, height: h,
     frame: false, 
@@ -304,7 +307,7 @@ ipcMain.handle('overlay-followup', async (_, question) => {
 Follow-up question: ${question}`;
       
       const result = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: config.ai.model,
         contents: contents
       });
       response = result.text.trim();
@@ -322,8 +325,8 @@ Follow-up question: ${question}`;
  */
 function createWelcomeWindow() {
   welcomeWindow = new BrowserWindow({
-    width: 900,
-    height: 700,
+    width: config.window.welcome.width,
+    height: config.window.welcome.height,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -384,7 +387,7 @@ app.whenReady().then(() => {
   createWelcomeWindow();
   
   // Register global shortcut
-  const registered = globalShortcut.register('CommandOrControl+Shift+Enter', summarizeSelection);
+  const registered = globalShortcut.register(config.shortcuts.main, summarizeSelection);
   console.log('[Shortcut registered]:', registered);
 });
 

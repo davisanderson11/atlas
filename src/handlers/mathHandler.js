@@ -1,5 +1,7 @@
 // Math equation detection and solving handler module
 
+import { config } from '../config.js';
+
 export class MathHandler {
   constructor(ai) {
     this.ai = ai;
@@ -204,7 +206,7 @@ Do NOT include any special formatting like "GRAPH_FUNCTION:" - just solve and ex
     
     try {
       const result = await this.ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: config.ai.model,
         contents: mathPrompt
       });
       
