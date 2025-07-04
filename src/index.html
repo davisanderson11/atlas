@@ -297,9 +297,18 @@
       }
     });
     
-    // Auto-focus on follow-up input when hovering
-    document.getElementById('container').addEventListener('mouseenter', () => {
+    // Handle mouse events for click-through
+    const container = document.getElementById('container');
+    
+    // Make window interactive when hovering over content
+    container.addEventListener('mouseenter', () => {
+      window.overlayAPI.setIgnoreMouseEvents(false);
       followupInput.focus();
+    });
+    
+    // Make window click-through when not hovering
+    container.addEventListener('mouseleave', () => {
+      window.overlayAPI.setIgnoreMouseEvents(true);
     });
   </script>
 </body>

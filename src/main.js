@@ -9,7 +9,8 @@ import {
   BrowserWindow,
   clipboard,
   screen,
-  ipcMain
+  ipcMain,
+  desktopCapturer
 } from 'electron';
 import { GoogleGenAI } from '@google/genai';
 
@@ -23,6 +24,7 @@ console.log('[main.js] loading...');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 let overlayWindow;
+let captureWindow;
 
 /**
  * Build AI prompt based on selected text
@@ -120,6 +122,9 @@ function createOverlay(text) {
     overlayWindow = null;
   });
   
+  // Make window click-through in transparent areas
+  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  
   overlayWindow.loadFile(join(__dirname, 'index.html'));
   overlayWindow.webContents.once('did-finish-load', () => {
     console.log('[Sending text to overlay]:', text);
@@ -163,7 +168,10 @@ async function summarizeSelection() {
     
     // Check if we got new text
     if (!selectedText || selectedText === originalClipboard) {
-      return createOverlay('Please select text before pressing the hotkey.');
+      // No text selected - trigger screenshot mode
+      console.log('[No text selected - starting screen capture]');
+      clipboard.writeText(originalClipboard); // Restore clipboard first
+      return startScreenCapture();
     }
     
     // Store original text for follow-ups
@@ -223,6 +231,13 @@ ipcMain.on('overlay-close', () => {
   }
 });
 
+// Handle mouse event ignoring
+ipcMain.on('set-ignore-mouse-events', (event, ignore) => {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.setIgnoreMouseEvents(ignore, { forward: true });
+  }
+});
+
 // Follow-up handler via IPC
 ipcMain.handle('overlay-followup', async (_, question) => {
   console.log('[Follow-up question]:', question);
@@ -250,3 +265,100 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', e => e.preventDefault());
 app.on('will-quit', () => globalShortcut.unregisterAll());
+
+/**
+ * Start screen capture mode
+ */
+async function startScreenCapture() {
+  // Get all displays
+  const displays = screen.getAllDisplays();
+  const primaryDisplay = screen.getPrimaryDisplay();
+  
+  // Create a fullscreen transparent window for selection
+  captureWindow = new BrowserWindow({
+    x: primaryDisplay.bounds.x,
+    y: primaryDisplay.bounds.y,
+    width: primaryDisplay.bounds.width,
+    height: primaryDisplay.bounds.height,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: join(__dirname, 'capture-preload.js')
+    }
+  });
+  
+  captureWindow.setIgnoreMouseEvents(false);
+  captureWindow.loadFile(join(__dirname, 'capture.html'));
+  
+  // Handle area selection
+  ipcMain.once('capture-area', async (event, bounds) => {
+    captureWindow.close();
+    captureWindow = null;
+    
+    // Take screenshot of selected area
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: {
+        width: primaryDisplay.bounds.width,
+        height: primaryDisplay.bounds.height
+      }
+    });
+    
+    if (sources.length > 0) {
+      // Convert the thumbnail to base64
+      const screenshot = sources[0].thumbnail;
+      const imageBuffer = screenshot.toPNG();
+      const base64Image = imageBuffer.toString('base64');
+      
+      // Process with Gemini Vision
+      await processScreenshot(base64Image, bounds);
+    }
+  });
+  
+  // Handle escape key
+  ipcMain.once('capture-cancelled', () => {
+    if (captureWindow) {
+      captureWindow.close();
+      captureWindow = null;
+    }
+  });
+}
+
+/**
+ * Process screenshot with Gemini Vision API
+ */
+async function processScreenshot(base64Image, bounds) {
+  console.log('[Processing screenshot]');
+  
+  try {
+    const result = await ai.models.generateContent({
+      model: 'gemini-1.5-pro',
+      contents: [{
+        parts: [
+          { text: 'Analyze this screenshot and explain what you see. Be concise.' },
+          {
+            inlineData: {
+              mimeType: 'image/png',
+              data: base64Image
+            }
+          }
+        ]
+      }]
+    });
+    
+    const text = result.text.trim();
+    console.log('[AI responded to screenshot]');
+    
+    // Store for follow-ups
+    originalSelectedText = '[Screenshot]';
+    
+    createOverlay(text);
+  } catch (error) {
+    console.error('[Screenshot AI error]:', error);
+    createOverlay(`Error analyzing screenshot: ${error.message}`);
+  }
+}
