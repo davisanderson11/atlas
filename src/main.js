@@ -242,7 +242,17 @@ async function processSelectedText(selectedText) {
     // 1. Check for math equations first
     if (mathHandler.isMathEquation(selectedText)) {
       console.log('[Math equation detected]');
+      
+      // Show processing status
+      createStatus('Solving equation...', 'info', 30000); // Long timeout, will close when done
+      
       const result = await mathHandler.process(selectedText);
+      
+      // Close status window
+      if (statusWindow && !statusWindow.isDestroyed()) {
+        statusWindow.close();
+        statusWindow = null;
+      }
       
       if (result.graphableFunction) {
         // Show with visualization
@@ -271,21 +281,54 @@ async function processSelectedText(selectedText) {
     
     // 3. Check for structured data only if it doesn't look like code
     if (!hasCodePatterns) {
+      // Show processing status
+      createStatus('Analyzing data...', 'info', 30000);
+      
       const dataResult = await dataHandler.process(selectedText);
       if (dataResult) {
         console.log('[Structured data detected]:', dataResult.dataType);
+        
+        // Close status window
+        if (statusWindow && !statusWindow.isDestroyed()) {
+          statusWindow.close();
+          statusWindow = null;
+        }
+        
         createOverlay(dataResult);
         return;
       }
+      
+      // If not data, continue to text processing
+      // Status window stays open
     }
     
     // 4. Process as regular text (including code)
     console.log('[Processing as regular text]');
+    
+    // Show processing status if not already shown
+    if (!statusWindow || statusWindow.isDestroyed()) {
+      createStatus('Processing text...', 'info', 30000);
+    }
+    
     const textResult = await textHandler.process(selectedText);
+    
+    // Close status window
+    if (statusWindow && !statusWindow.isDestroyed()) {
+      statusWindow.close();
+      statusWindow = null;
+    }
+    
     createOverlay(textResult);
     
   } catch (error) {
     console.error('[Processing error]:', error);
+    
+    // Close status window if open
+    if (statusWindow && !statusWindow.isDestroyed()) {
+      statusWindow.close();
+      statusWindow = null;
+    }
+    
     createOverlay(`Error: ${error.message}`);
   }
 }
@@ -308,7 +351,17 @@ async function startScreenCapture() {
     }
     
     const { screenshot, bounds } = captureResult;
+    
+    // Show processing status
+    createStatus('Analyzing screenshot...', 'info', 30000);
+    
     const result = await screenshotHandler.process(screenshot);
+    
+    // Close status window
+    if (statusWindow && !statusWindow.isDestroyed()) {
+      statusWindow.close();
+      statusWindow = null;
+    }
     
     // Store for follow-ups
     originalSelectedText = '[Screenshot]';
@@ -316,6 +369,12 @@ async function startScreenCapture() {
     
     createOverlay(result.text);
   } catch (error) {
+    // Close status window if open
+    if (statusWindow && !statusWindow.isDestroyed()) {
+      statusWindow.close();
+      statusWindow = null;
+    }
+    
     if (error.message !== 'Capture cancelled') {
       console.error('[Screenshot error]:', error);
       createOverlay(`Error: ${error.message}`);
@@ -792,12 +851,18 @@ async function triggerRewind() {
   
   console.log(`[Rewind has ${rewindData.frameCount} frames]`);
   
-  // Show loading overlay immediately
-  createOverlay('Analyzing the last 10 seconds...');
+  // Show loading status immediately
+  createStatus('Analyzing the last 10 seconds...', 'info', 30000);
   
   try {
     // Process with default prompt
     const result = await rewindHandler.processRewind('What happened in the last 10 seconds? Summarize the key activities and any notable changes.');
+    
+    // Close status window
+    if (statusWindow && !statusWindow.isDestroyed()) {
+      statusWindow.close();
+      statusWindow = null;
+    }
     
     // Store for follow-ups
     originalSelectedText = `[Rewind: ${result.duration.toFixed(1)}s of activity]`;
@@ -806,6 +871,13 @@ async function triggerRewind() {
     createOverlay(result.response);
   } catch (error) {
     console.error('[Rewind error]:', error);
+    
+    // Close status window if open
+    if (statusWindow && !statusWindow.isDestroyed()) {
+      statusWindow.close();
+      statusWindow = null;
+    }
+    
     createOverlay(`Error analyzing activity: ${error.message}`);
   }
 }
