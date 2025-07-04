@@ -9,6 +9,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@mdi/font@7.2.96/css/materialdesignicons.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
   <style>
     * {
       -webkit-app-region: no-drag;
@@ -311,6 +314,7 @@
       <button id="close" title="Close">×</button>
     </div>
     <div id="content">Loading…</div>
+    <canvas id="math-graph" style="display: none; width: 100%; max-height: 250px; margin: 12px 0; border-radius: 8px; background: rgba(0,0,0,0.3);"></canvas>
     <div id="viz-container">
       <div class="viz-header">
         <span class="viz-type">Data Visualization</span>
@@ -362,18 +366,75 @@
       }
     }
     
-    // Simple markdown parser for bold and italic
+    // Enhanced markdown parser with bullet points and line breaks
     function parseMarkdown(text) {
-      return text
-        .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>') // bold+italic
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') // bold
-        .replace(/\*(.+?)\*/g, '<em>$1</em>') // italic
-        .replace(/`(.+?)`/g, '<code style="background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px;">$1</code>'); // inline code
+      // First, escape HTML to prevent XSS
+      const escapeHtml = (str) => {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      };
+      
+      // Process line by line for better control
+      const lines = text.split('\n');
+      const processedLines = lines.map(line => {
+        // Preserve empty lines as line breaks
+        if (line.trim() === '') return '<br>';
+        
+        // Escape HTML first
+        let processed = escapeHtml(line);
+        
+        // Convert bullet points (supports -, *, •)
+        if (/^[\-\*•]\s/.test(line.trim())) {
+          processed = '<li>' + processed.substring(2) + '</li>';
+        }
+        
+        // Convert numbered lists
+        if (/^\d+\.\s/.test(line.trim())) {
+          processed = '<li>' + processed.replace(/^\d+\.\s/, '') + '</li>';
+        }
+        
+        // Bold + italic
+        processed = processed.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+        // Bold
+        processed = processed.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        // Italic
+        processed = processed.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        // Inline code
+        processed = processed.replace(/`(.+?)`/g, '<code style="background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; font-family: monospace;">$1</code>');
+        
+        return processed;
+      });
+      
+      // Join lines and wrap lists
+      let html = processedLines.join('\n');
+      
+      // Wrap consecutive <li> elements in <ul>
+      html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => {
+        return '<ul style="margin: 8px 0; padding-left: 20px;">' + match + '</ul>';
+      });
+      
+      // Convert remaining line breaks
+      html = html.replace(/\n/g, '<br>');
+      
+      return html;
     }
     
     function updateContent(text) {
       const parsedText = parseMarkdown(text || 'No response');
       contentEl.innerHTML = parsedText;
+      
+      // Render LaTeX math
+      renderMathInElement(contentEl, {
+        delimiters: [
+          {left: '$$', right: '$$', display: true},
+          {left: '$', right: '$', display: false},
+          {left: '\\(', right: '\\)', display: false},
+          {left: '\\[', right: '\\]', display: true},
+          {left: '\\boxed{', right: '}', display: false}
+        ],
+        throwOnError: false
+      });
       isExpanded = false;
       contentEl.classList.remove('expanded');
       expandHint.textContent = 'Read more';
@@ -383,6 +444,21 @@
     window.overlayAPI.onText((text) => {
       console.log('[Received text]:', text);
       updateContent(text);
+      // Hide math graph for regular text
+      document.getElementById('math-graph').style.display = 'none';
+    });
+    
+    // Handle math solutions with graphs
+    window.overlayAPI.onMath((data) => {
+      console.log('[Received math solution]:', data);
+      updateContent(data.text);
+      
+      // If there's a function to graph, draw it
+      if (data.graphFunction) {
+        const mathGraph = document.getElementById('math-graph');
+        mathGraph.style.display = 'block';
+        drawFunction(data.graphFunction);
+      }
     });
     
     // Toggle expansion function
@@ -635,6 +711,157 @@
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+    
+    // Function to draw mathematical functions
+    function drawFunction(functionStr) {
+      const canvas = document.getElementById('math-graph');
+      const ctx = canvas.getContext('2d');
+      
+      // Set canvas size
+      canvas.width = canvas.offsetWidth;
+      canvas.height = 250;
+      
+      try {
+        // Create the function from string
+        const func = new Function('x', `return ${functionStr}`);
+        
+        // Set up coordinate system
+        const padding = 20;
+        const width = canvas.width - 2 * padding;
+        const height = canvas.height - 2 * padding;
+        
+        // Define the viewing window
+        const xMin = -10;
+        const xMax = 10;
+        const xRange = xMax - xMin;
+        
+        // Calculate y range by sampling the function
+        let yMin = Infinity;
+        let yMax = -Infinity;
+        for (let x = xMin; x <= xMax; x += 0.1) {
+          try {
+            const y = func(x);
+            if (isFinite(y)) {
+              yMin = Math.min(yMin, y);
+              yMax = Math.max(yMax, y);
+            }
+          } catch (e) {}
+        }
+        
+        // Add some padding to y range
+        const yPadding = (yMax - yMin) * 0.1 || 1;
+        yMin -= yPadding;
+        yMax += yPadding;
+        const yRange = yMax - yMin;
+        
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw axes
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.lineWidth = 1;
+        
+        // X-axis
+        const xAxisY = padding + height * (yMax / yRange);
+        if (xAxisY >= padding && xAxisY <= padding + height) {
+          ctx.beginPath();
+          ctx.moveTo(padding, xAxisY);
+          ctx.lineTo(padding + width, xAxisY);
+          ctx.stroke();
+        }
+        
+        // Y-axis
+        const yAxisX = padding + width * (-xMin / xRange);
+        if (yAxisX >= padding && yAxisX <= padding + width) {
+          ctx.beginPath();
+          ctx.moveTo(yAxisX, padding);
+          ctx.lineTo(yAxisX, padding + height);
+          ctx.stroke();
+        }
+        
+        // Draw grid
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.setLineDash([5, 5]);
+        
+        // Vertical grid lines
+        for (let x = Math.ceil(xMin); x <= xMax; x++) {
+          const screenX = padding + width * ((x - xMin) / xRange);
+          ctx.beginPath();
+          ctx.moveTo(screenX, padding);
+          ctx.lineTo(screenX, padding + height);
+          ctx.stroke();
+        }
+        
+        // Horizontal grid lines
+        const yStep = Math.pow(10, Math.floor(Math.log10(yRange / 5)));
+        for (let y = Math.ceil(yMin / yStep) * yStep; y <= yMax; y += yStep) {
+          const screenY = padding + height * (1 - (y - yMin) / yRange);
+          ctx.beginPath();
+          ctx.moveTo(padding, screenY);
+          ctx.lineTo(padding + width, screenY);
+          ctx.stroke();
+        }
+        
+        ctx.setLineDash([]);
+        
+        // Draw function
+        ctx.strokeStyle = '#667eea';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        let firstPoint = true;
+        for (let px = 0; px <= width; px++) {
+          const x = xMin + (px / width) * xRange;
+          try {
+            const y = func(x);
+            if (isFinite(y)) {
+              const screenX = padding + px;
+              const screenY = padding + height * (1 - (y - yMin) / yRange);
+              
+              if (firstPoint) {
+                ctx.moveTo(screenX, screenY);
+                firstPoint = false;
+              } else {
+                ctx.lineTo(screenX, screenY);
+              }
+            } else {
+              firstPoint = true;
+            }
+          } catch (e) {
+            firstPoint = true;
+          }
+        }
+        
+        ctx.stroke();
+        
+        // Add labels
+        ctx.fillStyle = '#a0a0a0';
+        ctx.font = '12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        
+        // X-axis labels
+        for (let x = Math.ceil(xMin); x <= xMax; x += 2) {
+          const screenX = padding + width * ((x - xMin) / xRange);
+          ctx.fillText(x.toString(), screenX, padding + height + 5);
+        }
+        
+        // Y-axis labels
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (let y = Math.ceil(yMin / yStep) * yStep; y <= yMax; y += yStep) {
+          const screenY = padding + height * (1 - (y - yMin) / yRange);
+          ctx.fillText(y.toFixed(1), padding - 5, screenY);
+        }
+        
+      } catch (error) {
+        console.error('Error drawing function:', error);
+        ctx.fillStyle = '#ff6b6b';
+        ctx.font = '14px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Error graphing function', canvas.width / 2, canvas.height / 2);
+      }
     }
     
     // Handle mouse events for click-through

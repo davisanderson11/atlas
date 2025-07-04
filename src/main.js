@@ -322,10 +322,12 @@ function createOverlay(content) {
     console.log('[Overlay window created successfully]');
     overlayWindow.loadFile(join(__dirname, 'index.html'));
     overlayWindow.webContents.once('did-finish-load', () => {
-      console.log('[Sending content to overlay]:', typeof content === 'string' ? 'text' : 'visualization');
+      console.log('[Sending content to overlay]:', typeof content === 'string' ? 'text' : content.type || 'visualization');
       if (overlayWindow && !overlayWindow.isDestroyed()) {
         if (typeof content === 'string') {
           overlayWindow.webContents.send('overlay-text', content);
+        } else if (content.type === 'math-solution') {
+          overlayWindow.webContents.send('overlay-math', content);
         } else {
           overlayWindow.webContents.send('overlay-data', content);
         }
@@ -413,7 +415,12 @@ Please:
 2. Show each step of the solution
 3. Explain what you're doing in each step
 4. Give the final answer clearly
-5. If it's a function, describe its properties (domain, range, etc.)`;
+5. If it's a function of x, describe its properties (domain, range, etc.)
+6. Use LaTeX notation for mathematical expressions (e.g., $x^2$, $\\frac{a}{b}$, $\\boxed{answer}$)
+7. Use bullet points where appropriate
+
+IMPORTANT: If this is a function that can be graphed (like y = f(x)), at the very end of your response, add this exact line:
+GRAPH_FUNCTION: [the function in JavaScript syntax, e.g., "x => x*x + 2*x - 3"]`;
 
         console.log('[Sending math to AI for solving]');
         
@@ -425,6 +432,22 @@ Please:
           });
           aiResponse = result.text.trim();
           console.log('[AI solved math problem]');
+          
+          // Check if the response contains a graphable function
+          const graphMatch = aiResponse.match(/GRAPH_FUNCTION:\s*\[(.*?)\]/);
+          if (graphMatch) {
+            const functionStr = graphMatch[1];
+            // Remove the graph instruction from the display text
+            aiResponse = aiResponse.replace(/GRAPH_FUNCTION:.*$/, '').trim();
+            
+            // Send both the text and the function to graph
+            createOverlay({
+              type: 'math-solution',
+              text: aiResponse,
+              graphFunction: functionStr
+            });
+            return;
+          }
         } catch (error) {
           console.error('[Math AI error]:', error);
           aiResponse = `Error solving equation: ${error.message}`;
