@@ -404,7 +404,7 @@
 <body>
   <div id="container">
     <div id="header">
-      <div id="title"><i class="mdi mdi-cube-outline"></i>AI Summary</div>
+      <div id="title"><i class="mdi mdi-book-open-page-variant-outline"></i>AI Summary</div>
       <button id="close" title="Close">×</button>
     </div>
     <div id="content">Loading…</div>
@@ -578,6 +578,30 @@
       if (e.key === 'Enter' && followupInput.value.trim()) {
         const question = followupInput.value.trim();
         
+        // Check if we're in rewind mode
+        if (window.rewindData) {
+          // Process rewind with the question
+          contentEl.innerHTML = '<span class="loading-spinner"></span>Analyzing the last 10 seconds<span class="loading-dots"></span>';
+          contentEl.style.display = 'block';
+          
+          try {
+            const result = await window.overlayAPI.processRewind(question);
+            updateContent(result);
+            followupInput.value = '';
+            
+            // Update label back to normal
+            const label = document.getElementById('more').querySelector('label');
+            label.textContent = 'Ask a follow-up:';
+            followupInput.placeholder = 'Type your question…';
+            
+            // Clear rewind data
+            window.rewindData = null;
+          } catch (err) {
+            updateContent('Error: ' + err.message);
+          }
+          return;
+        }
+        
         // Check if we're in visualization mode (math or data)
         if (currentData) {
           // For math mode, update the solution tab with the follow-up answer
@@ -653,6 +677,33 @@
     window.overlayAPI.onData((data) => {
       console.log('[Received data]:', data);
       currentData = data;
+      
+      // Check if this is rewind mode
+      if (data.type === 'rewind') {
+        // Show rewind prompt mode
+        contentEl.style.display = 'none';
+        vizContainer.style.display = 'none';
+        expandHint.style.display = 'none';
+        
+        // Update title
+        const titleEl = document.querySelector('#title');
+        titleEl.innerHTML = '<i class="mdi mdi-rewind"></i>Rewind Analysis';
+        
+        // Show follow-up input with custom placeholder
+        const followupInput = document.getElementById('followup');
+        const moreSection = document.getElementById('more');
+        const label = moreSection.querySelector('label');
+        
+        label.textContent = 'What happened in the last 10 seconds?';
+        followupInput.placeholder = 'e.g., "What was that error message?" or "What did I just click?"';
+        followupInput.value = '';
+        followupInput.focus();
+        
+        // Store rewind data for processing
+        window.rewindData = data.rewindData;
+        
+        return;
+      }
       
       // Hide text content and show viz container
       contentEl.style.display = 'none';

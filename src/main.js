@@ -20,6 +20,7 @@ import { TextHandler } from './handlers/textHandler.js';
 import { ScreenshotHandler } from './handlers/screenshotHandler.js';
 import { MathHandler } from './handlers/mathHandler.js';
 import { DataHandler } from './handlers/dataHandler.js';
+import { RewindHandler } from './handlers/rewindHandler.js';
 
 // Derive __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -40,6 +41,7 @@ const textHandler = new TextHandler(ai);
 const screenshotHandler = new ScreenshotHandler(ai);
 const mathHandler = new MathHandler(ai);
 const dataHandler = new DataHandler(ai);
+const rewindHandler = new RewindHandler(ai);
 
 let overlayWindow;
 let welcomeWindow;
@@ -296,6 +298,19 @@ ipcMain.on('set-ignore-mouse-events', (event, ignore) => {
   }
 });
 
+// Rewind process handler
+ipcMain.handle('rewind-process', async (_, question) => {
+  console.log('[Rewind process] Question:', question);
+  
+  try {
+    const result = await rewindHandler.processRewind(question);
+    return result.response;
+  } catch (error) {
+    console.error('[Rewind process error]:', error);
+    return `Error: ${error.message}`;
+  }
+});
+
 // Follow-up handler via IPC
 ipcMain.handle('overlay-followup', async (_, question) => {
   console.log('[Follow-up question]:', question);
@@ -394,10 +409,55 @@ app.whenReady().then(() => {
   // Create welcome window on launch
   createWelcomeWindow();
   
-  // Register global shortcut
-  const registered = globalShortcut.register(config.shortcuts.main, summarizeSelection);
-  console.log('[Shortcut registered]:', registered);
+  // Register global shortcuts
+  const mainRegistered = globalShortcut.register(config.shortcuts.main, summarizeSelection);
+  console.log('[Main shortcut registered]:', mainRegistered);
+  
+  const rewindRegistered = globalShortcut.register(config.shortcuts.rewind, triggerRewind);
+  console.log('[Rewind shortcut registered]:', rewindRegistered);
+  
+  // Start rewind recording
+  rewindHandler.startRecording();
+  
+  // Monitor active window for privacy
+  setInterval(() => {
+    const focusedWindow = BrowserWindow.getFocusedWindow();
+    if (focusedWindow && focusedWindow !== welcomeWindow && focusedWindow !== overlayWindow) {
+      const title = focusedWindow.getTitle();
+      if (rewindHandler.shouldPauseRecording(title)) {
+        console.log('[Privacy] Pausing recording for sensitive app:', title);
+        rewindHandler.clearBuffer();
+      }
+    }
+  }, 1000); // Check every second
 });
 
 app.on('window-all-closed', e => e.preventDefault());
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+  rewindHandler.stopRecording();
+});
+
+/**
+ * Trigger rewind mode
+ */
+function triggerRewind() {
+  console.log('[Rewind triggered]');
+  
+  // Check if we have frames in buffer
+  const rewindData = rewindHandler.getRewindData();
+  
+  if (!rewindData || rewindData.frames.length === 0) {
+    console.log('[No frames in buffer]');
+    createOverlay('No recent activity captured. Rewind starts capturing after app launch.');
+    return;
+  }
+  
+  console.log(`[Rewind has ${rewindData.frameCount} frames]`);
+  
+  // Show overlay in rewind mode
+  createOverlay({
+    type: 'rewind',
+    rewindData: rewindData
+  });
+}
