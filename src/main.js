@@ -45,6 +45,7 @@ const rewindHandler = new RewindHandler(ai);
 
 let overlayWindow;
 let welcomeWindow;
+let privacyMonitorInterval = null;
 
 // Store original context for follow-ups
 let originalSelectedText = '';
@@ -408,6 +409,59 @@ ipcMain.on('welcome-close', () => {
   }
 });
 
+// Settings handlers
+ipcMain.handle('get-settings', () => {
+  return config;
+});
+
+ipcMain.handle('update-setting', async (event, setting, value) => {
+  console.log(`[Settings] Updating ${setting} to ${value}`);
+  
+  // Update config based on setting
+  if (setting === 'rewind') {
+    config.features.rewind.enabled = value;
+    
+    // Handle rewind feature toggle
+    if (value) {
+      // Enable rewind
+      const registered = globalShortcut.register(config.shortcuts.rewind, triggerRewind);
+      if (registered) {
+        rewindHandler.startRecording();
+        console.log('[Settings] Rewind feature enabled');
+        
+        // Start privacy monitoring
+        if (!privacyMonitorInterval) {
+          privacyMonitorInterval = setInterval(() => {
+            const focusedWindow = BrowserWindow.getFocusedWindow();
+            if (focusedWindow && focusedWindow !== welcomeWindow && focusedWindow !== overlayWindow) {
+              const title = focusedWindow.getTitle();
+              if (rewindHandler.shouldPauseRecording(title)) {
+                console.log('[Privacy] Pausing recording for sensitive app:', title);
+                rewindHandler.clearBuffer();
+              }
+            }
+          }, 1000);
+        }
+      }
+    } else {
+      // Disable rewind
+      globalShortcut.unregister(config.shortcuts.rewind);
+      rewindHandler.stopRecording();
+      console.log('[Settings] Rewind feature disabled');
+      
+      // Stop privacy monitoring
+      if (privacyMonitorInterval) {
+        clearInterval(privacyMonitorInterval);
+        privacyMonitorInterval = null;
+      }
+    }
+  }
+  
+  // You can add more settings handlers here in the future
+  
+  return true;
+});
+
 // App lifecycle
 app.whenReady().then(() => {
   console.log('[App ready]');
@@ -432,7 +486,7 @@ app.whenReady().then(() => {
   
   // Monitor active window for privacy (only if rewind is enabled)
   if (config.features.rewind.enabled) {
-    setInterval(() => {
+    privacyMonitorInterval = setInterval(() => {
       const focusedWindow = BrowserWindow.getFocusedWindow();
       if (focusedWindow && focusedWindow !== welcomeWindow && focusedWindow !== overlayWindow) {
         const title = focusedWindow.getTitle();
@@ -458,6 +512,12 @@ app.on('will-quit', () => {
  */
 async function triggerRewind() {
   console.log('[Rewind triggered]');
+  
+  // Check if rewind feature is enabled
+  if (!config.features.rewind.enabled) {
+    console.log('[Rewind feature is disabled]');
+    return;
+  }
   
   // Check if we have frames in buffer
   const rewindData = rewindHandler.getRewindData();

@@ -291,6 +291,162 @@
       text-align: center;
       line-height: 1.6;
     }
+    
+    /* Settings button */
+    #settings-btn {
+      position: absolute;
+      top: 60px;
+      right: 20px;
+      width: 36px;
+      height: 36px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      color: #a0a0a0;
+    }
+    
+    #settings-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #e0e0e0;
+    }
+    
+    #settings-btn i {
+      font-size: 20px;
+      transition: transform 0.3s ease;
+    }
+    
+    #settings-btn:hover i {
+      transform: rotate(45deg);
+    }
+    
+    /* Settings modal */
+    #settings-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      animation: fadeIn 0.2s ease-out;
+    }
+    
+    #settings-content {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(30, 30, 30, 0.98);
+      border-radius: 16px;
+      padding: 32px;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+    
+    #settings-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+    
+    #settings-title {
+      font-size: 24px;
+      font-weight: 600;
+      color: #e0e0e0;
+    }
+    
+    #settings-close {
+      width: 32px;
+      height: 32px;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      border-radius: 8px;
+      color: #a0a0a0;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: all 0.2s ease;
+      font-size: 20px;
+    }
+    
+    #settings-close:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: #e0e0e0;
+    }
+    
+    .setting-item {
+      margin-bottom: 20px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .setting-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    
+    .setting-title {
+      font-size: 16px;
+      font-weight: 500;
+      color: #e0e0e0;
+    }
+    
+    .setting-desc {
+      font-size: 13px;
+      color: #a0a0a0;
+      line-height: 1.5;
+    }
+    
+    /* Toggle switch */
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .toggle-switch.active {
+      background: #667eea;
+    }
+    
+    .toggle-slider {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 18px;
+      height: 18px;
+      background: #fff;
+      border-radius: 50%;
+      transition: all 0.3s ease;
+    }
+    
+    .toggle-switch.active .toggle-slider {
+      transform: translateX(20px);
+    }
+    
+    .setting-note {
+      font-size: 12px;
+      color: #707070;
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: rgba(102, 126, 234, 0.1);
+      border-radius: 6px;
+      border-left: 3px solid #667eea;
+    }
   </style>
 </head>
 <body>
@@ -307,6 +463,10 @@
   <!-- Main scrollable content -->
   <div id="main-content">
     <div id="container">
+      <!-- Settings button -->
+      <button id="settings-btn" title="Settings">
+        <i class="mdi mdi-cog"></i>
+      </button>
       <div id="header">
         <div id="title">
           <i class="mdi mdi-book-open-page-variant-outline"></i>
@@ -315,7 +475,7 @@
       </div>
     
     <p class="subtitle">
-      Your AI-powered assistant for instant text analysis, data visualization, math solving, and screenshot understanding
+      Your AI-powered assistant for instant text analysis, data visualization, math solving, screenshot understanding, and screen activity review
     </p>
     
     <div class="hotkey-section">
@@ -324,6 +484,12 @@
       </div>
       <p class="hotkey-desc">
         Your global hotkey for instant AI assistance
+      </p>
+      <div class="hotkey" style="margin-top: 16px;">
+        <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>'</kbd>
+      </div>
+      <p class="hotkey-desc">
+        Rewind and review recent screen activity (Beta - enable in settings)
       </p>
     </div>
     
@@ -376,7 +542,13 @@
         </div>
       </div>
       
-      <!-- Rewind feature removed from UI since it's disabled by default (premium feature) -->
+      <div class="feature-card">
+        <i class="mdi mdi-rewind-outline feature-icon"></i>
+        <div class="feature-title">Rewind (Beta)</div>
+        <div class="feature-desc">
+          Review the last 10 seconds of screen activity with Ctrl+Shift+'
+        </div>
+      </div>
     </div>
     
     <div class="status">
@@ -392,5 +564,118 @@
     </div>
     </div>
   </div>
+  
+  <!-- Settings Modal -->
+  <div id="settings-modal">
+    <div id="settings-content">
+      <div id="settings-header">
+        <h2 id="settings-title">Settings</h2>
+        <button id="settings-close">
+          <i class="mdi mdi-close"></i>
+        </button>
+      </div>
+      
+      <div id="settings-body">
+        <!-- Rewind Feature Toggle -->
+        <div class="setting-item">
+          <div class="setting-header">
+            <div>
+              <div class="setting-title">Rewind Feature</div>
+              <div class="setting-desc">Capture and analyze the last 10 seconds of screen activity with Ctrl+Shift+'</div>
+            </div>
+            <div class="toggle-switch" data-setting="rewind">
+              <div class="toggle-slider"></div>
+            </div>
+          </div>
+          <div class="setting-note">
+            <i class="mdi mdi-information-outline"></i>
+            Beta feature - captures screen activity for quick review
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Settings modal functionality
+    const settingsBtn = document.getElementById('settings-btn');
+    const settingsModal = document.getElementById('settings-modal');
+    const settingsClose = document.getElementById('settings-close');
+    const toggleSwitches = document.querySelectorAll('.toggle-switch');
+    
+    // Load current settings
+    async function loadSettings() {
+      const settings = await window.welcomeAPI.getSettings();
+      
+      // Update rewind toggle
+      const rewindToggle = document.querySelector('[data-setting="rewind"]');
+      if (settings.features.rewind.enabled) {
+        rewindToggle.classList.add('active');
+      }
+    }
+    
+    // Show settings modal
+    settingsBtn.addEventListener('click', () => {
+      settingsModal.style.display = 'block';
+      loadSettings();
+    });
+    
+    // Close settings modal
+    settingsClose.addEventListener('click', () => {
+      settingsModal.style.display = 'none';
+    });
+    
+    // Close modal when clicking outside
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) {
+        settingsModal.style.display = 'none';
+      }
+    });
+    
+    // Handle toggle switches
+    toggleSwitches.forEach(toggle => {
+      toggle.addEventListener('click', async () => {
+        toggle.classList.toggle('active');
+        const isActive = toggle.classList.contains('active');
+        const setting = toggle.dataset.setting;
+        
+        // Update setting
+        await window.welcomeAPI.updateSetting(setting, isActive);
+        
+        // Show notification
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+          position: fixed;
+          bottom: 20px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(102, 126, 234, 0.9);
+          color: white;
+          padding: 12px 24px;
+          border-radius: 8px;
+          font-size: 14px;
+          animation: fadeIn 0.3s ease-out;
+          z-index: 2000;
+        `;
+        notification.textContent = `${setting.charAt(0).toUpperCase() + setting.slice(1)} ${isActive ? 'enabled' : 'disabled'}`;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+          notification.style.animation = 'fadeOut 0.3s ease-out';
+          setTimeout(() => notification.remove(), 300);
+        }, 2000);
+      });
+    });
+    
+    // Add fadeOut animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+  </script>
 </body>
 </html>

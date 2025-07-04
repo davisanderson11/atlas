@@ -328,6 +328,10 @@ export class RewindHandler {
     console.log('[RewindHandler] Stopping capture');
     this.isRecording = false;
     
+    // Clear frame buffer when stopping
+    this.frameBuffer = [];
+    this.lastFrameData = null;
+    
     // Cleanup worker
     if (this.worker) {
       this.worker.terminate();
