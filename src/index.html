@@ -417,8 +417,7 @@
     const tableContainer = document.getElementById('table-container');
     const rawContainer = document.getElementById('raw-container');
     
-    // Set initial loading state with spinner
-    contentEl.innerHTML = '<span class="loading-spinner"></span>Analyzing<span class="loading-dots"></span>';
+    contentEl.innerText = 'Loading...';
     
     let isExpanded = false;
     let currentChart = null;
@@ -517,16 +516,7 @@
     
     window.overlayAPI.onText((text) => {
       console.log('[Received text]:', text);
-      // Check for special loading state
-      if (text === 'LOADING') {
-        contentEl.innerHTML = '<span class="loading-spinner"></span>Analyzing<span class="loading-dots"></span>';
-        // Hide viz container and show content
-        vizContainer.style.display = 'none';
-        contentEl.style.display = 'block';
-        expandHint.style.display = 'none';
-      } else {
-        updateContent(text);
-      }
+      updateContent(text);
     });
     
     // Remove the old math handler since we're using the data visualization system now
@@ -567,16 +557,74 @@
     followupInput.addEventListener('keydown', async (e) => {
       if (e.key === 'Enter' && followupInput.value.trim()) {
         const question = followupInput.value.trim();
-        contentEl.innerHTML = '<span class="loading-spinner"></span>Thinking<span class="loading-dots"></span>';
-        contentEl.style.display = 'block';
-        vizContainer.style.display = 'none';
-        expandHint.style.display = 'none';
+        
+        // Check if we're in visualization mode (math or data)
+        if (currentData) {
+          // For math mode, update the solution tab with the follow-up answer
+          if (currentData.dataType === 'math') {
+            // Show loading in the solution area
+            tableContainer.innerHTML = '<div style="padding: 20px; color: #e0e0e0; text-align: center;"><span class="loading-spinner"></span>Thinking<span class="loading-dots"></span></div>';
+            showSolution(); // Switch to solution tab
+          } else {
+            // For other data types, show loading in table view
+            tableContainer.innerHTML = '<div style="padding: 20px; color: #e0e0e0; text-align: center;"><span class="loading-spinner"></span>Thinking<span class="loading-dots"></span></div>';
+            showTable();
+          }
+        } else {
+          // Regular text mode
+          contentEl.innerHTML = '<span class="loading-spinner"></span>Thinking<span class="loading-dots"></span>';
+          contentEl.style.display = 'block';
+          vizContainer.style.display = 'none';
+          expandHint.style.display = 'none';
+        }
+        
         try {
           const reply = await window.overlayAPI.askFollowUp(question);
-          updateContent(reply);
+          
+          if (currentData) {
+            // Update the appropriate container for visualization mode
+            const replyHtml = parseMarkdown(reply);
+            if (currentData.dataType === 'math') {
+              // Update solution with follow-up answer
+              tableContainer.innerHTML = `<div class="math-solution-content" style="padding: 20px; color: #e0e0e0; line-height: 1.6; overflow-y: auto; max-height: 280px;">
+                <div style="background: rgba(102, 126, 234, 0.1); border-left: 3px solid #667eea; padding: 10px; margin-bottom: 15px; border-radius: 4px;">
+                  <strong style="color: #667eea;">Follow-up Question:</strong> <em>${escapeHtml(question)}</em>
+                </div>
+                ${replyHtml}
+              </div>`;
+              
+              // Render LaTeX
+              renderMathInElement(tableContainer, {
+                delimiters: [
+                  {left: '$$', right: '$$', display: true},
+                  {left: '$', right: '$', display: false},
+                  {left: '\\(', right: '\\)', display: false},
+                  {left: '\\[', right: '\\]', display: true},
+                  {left: '\\boxed{', right: '}', display: false}
+                ],
+                throwOnError: false
+              });
+            } else {
+              // For other data types, show the reply in table view
+              tableContainer.innerHTML = `<div style="padding: 20px; color: #e0e0e0; line-height: 1.8; overflow-y: auto; max-height: 280px;">
+                <div style="background: rgba(102, 126, 234, 0.1); border-left: 3px solid #667eea; padding: 10px; margin-bottom: 15px; border-radius: 4px;">
+                  <strong style="color: #667eea;">Follow-up Question:</strong> <em>${escapeHtml(question)}</em>
+                </div>
+                ${replyHtml}
+              </div>`;
+            }
+          } else {
+            // Regular text mode
+            updateContent(reply);
+          }
+          
           followupInput.value = '';
         } catch (err) {
-          updateContent('Error: ' + err.message);
+          if (currentData) {
+            tableContainer.innerHTML = `<div style="padding: 20px; color: #ff6b6b;">Error: ${err.message}</div>`;
+          } else {
+            updateContent('Error: ' + err.message);
+          }
         }
       }
     });
@@ -656,7 +704,7 @@
       if (currentData && currentData.dataType === 'math') {
         // Display the solution with LaTeX rendering
         const solutionHtml = parseMarkdown(currentData.data.solution);
-        tableContainer.innerHTML = `<div class="math-solution-content" style="padding: 20px; color: #e0e0e0; line-height: 1.8; overflow-y: auto; max-height: 280px;">${solutionHtml}</div>`;
+        tableContainer.innerHTML = `<div class="math-solution-content" style="padding: 20px; color: #e0e0e0; line-height: 1.6; overflow-y: auto; max-height: 280px;">${solutionHtml}</div>`;
         
         // Render LaTeX
         renderMathInElement(tableContainer, {
