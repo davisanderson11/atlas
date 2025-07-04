@@ -170,22 +170,15 @@
     
     .feature-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(2, 1fr);
       gap: 20px;
       margin-bottom: 40px;
     }
     
-    /* Ensure 4 columns on wide screens */
-    @media (min-width: 900px) {
+    /* Single column on small screens */
+    @media (max-width: 600px) {
       .feature-grid {
-        grid-template-columns: repeat(4, 1fr);
-      }
-    }
-    
-    /* 2 columns on medium screens */
-    @media (max-width: 899px) and (min-width: 500px) {
-      .feature-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: 1fr;
       }
     }
     
@@ -425,7 +418,7 @@
     /* Toggle switch */
     .toggle-switch {
       position: relative;
-      width: 44px;
+      width: 48px;
       height: 24px;
       background: rgba(255, 255, 255, 0.2);
       border-radius: 12px;
@@ -439,17 +432,18 @@
     
     .toggle-slider {
       position: absolute;
-      top: 3px;
-      left: 3px;
-      width: 18px;
-      height: 18px;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
       background: #fff;
       border-radius: 50%;
       transition: all 0.3s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
     
     .toggle-switch.active .toggle-slider {
-      transform: translateX(20px);
+      transform: translateX(24px);
     }
     
     .setting-note {

@@ -13,6 +13,7 @@ import {
 } from 'electron';
 import { GoogleGenAI } from '@google/genai';
 import { homedir } from 'os';
+import { mkdirSync, existsSync } from 'fs';
 
 // Import config and handlers
 import { config } from './config.js';
@@ -29,6 +30,24 @@ const __dirname = dirname(__filename);
 
 // Set custom cache directory to avoid Windows permission issues
 const userDataPath = join(homedir(), '.atlas');
+
+// Ensure directories exist
+try {
+  if (!existsSync(userDataPath)) {
+    mkdirSync(userDataPath, { recursive: true });
+  }
+  const cachePath = join(userDataPath, 'cache');
+  if (!existsSync(cachePath)) {
+    mkdirSync(cachePath, { recursive: true });
+  }
+  const sessionPath = join(userDataPath, 'session');
+  if (!existsSync(sessionPath)) {
+    mkdirSync(sessionPath, { recursive: true });
+  }
+} catch (error) {
+  console.warn('[Directory creation warning]:', error.message);
+}
+
 app.setPath('userData', userDataPath);
 
 // Set cache path before app is ready to avoid permission issues
@@ -41,6 +60,10 @@ try {
 }
 
 console.log('[main.js] loading...');
+
+// Add command line switches to help with cache issues
+app.commandLine.appendSwitch('disable-gpu-sandbox');
+app.commandLine.appendSwitch('no-sandbox');
 
 // Initialize Gemini client
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -481,17 +504,59 @@ app.whenReady().then(() => {
   // Create welcome window on launch
   createWelcomeWindow();
   
-  // Register global shortcuts
-  const mainRegistered = globalShortcut.register(config.shortcuts.main, summarizeSelection);
-  console.log('[Main shortcut registered]:', mainRegistered);
+  // Register global shortcuts with better error handling
+  try {
+    // Check if the shortcut is already registered
+    const isMainRegistered = globalShortcut.isRegistered(config.shortcuts.main);
+    console.log('[Main shortcut already registered?]:', isMainRegistered);
+    
+    if (isMainRegistered) {
+      // If it's already registered, it might be from a previous instance
+      // Try to use it as-is first
+      console.log('[Main shortcut appears to be working from previous registration]');
+    } else {
+      // Try to register it
+      const mainRegistered = globalShortcut.register(config.shortcuts.main, summarizeSelection);
+      console.log('[Main shortcut registration attempt]:', mainRegistered);
+      
+      if (!mainRegistered) {
+        // Only fall back if we truly can't register it
+        console.log('[Failed to register main shortcut, checking if it still works...]');
+        
+        // Sometimes the shortcut works even if registration returns false
+        // This can happen with Electron on Windows
+        setTimeout(() => {
+          if (!globalShortcut.isRegistered(config.shortcuts.main)) {
+            console.log('[Main shortcut truly not working, using fallback]');
+            const altRegistered = globalShortcut.register('CommandOrControl+Shift+Space', summarizeSelection);
+            console.log('[Alternative shortcut registered]:', altRegistered);
+          } else {
+            console.log('[Main shortcut is working despite registration failure]');
+          }
+        }, 100);
+      }
+    }
+  } catch (error) {
+    console.error('[Shortcut registration error]:', error);
+  }
   
   // Only register rewind shortcut if feature is enabled
   if (config.features.rewind.enabled) {
-    const rewindRegistered = globalShortcut.register(config.shortcuts.rewind, triggerRewind);
-    console.log('[Rewind shortcut registered]:', rewindRegistered);
-    
-    // Start rewind recording
-    rewindHandler.startRecording();
+    try {
+      if (globalShortcut.isRegistered(config.shortcuts.rewind)) {
+        globalShortcut.unregister(config.shortcuts.rewind);
+      }
+      
+      const rewindRegistered = globalShortcut.register(config.shortcuts.rewind, triggerRewind);
+      console.log('[Rewind shortcut registered]:', rewindRegistered);
+      
+      if (rewindRegistered) {
+        // Start rewind recording
+        rewindHandler.startRecording();
+      }
+    } catch (error) {
+      console.error('[Rewind shortcut registration error]:', error);
+    }
   } else {
     console.log('[Rewind feature disabled]');
   }
@@ -512,10 +577,23 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', e => e.preventDefault());
+
+app.on('before-quit', () => {
+  console.log('[App] Before quit - unregistering shortcuts');
+  globalShortcut.unregisterAll();
+});
+
 app.on('will-quit', () => {
+  console.log('[App] Will quit - cleaning up');
   globalShortcut.unregisterAll();
   if (config.features.rewind.enabled) {
     rewindHandler.stopRecording();
+  }
+  
+  // Clear privacy monitor
+  if (privacyMonitorInterval) {
+    clearInterval(privacyMonitorInterval);
+    privacyMonitorInterval = null;
   }
 });
 
