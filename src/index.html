@@ -202,6 +202,33 @@
       background: rgba(255, 255, 255, 0.3);
     }
     
+    /* Scrollbar for table and raw containers */
+    #table-container::-webkit-scrollbar,
+    #raw-container::-webkit-scrollbar,
+    .math-solution-content::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    #table-container::-webkit-scrollbar-track,
+    #raw-container::-webkit-scrollbar-track,
+    .math-solution-content::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+    }
+    
+    #table-container::-webkit-scrollbar-thumb,
+    #raw-container::-webkit-scrollbar-thumb,
+    .math-solution-content::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+    }
+    
+    #table-container::-webkit-scrollbar-thumb:hover,
+    #raw-container::-webkit-scrollbar-thumb:hover,
+    .math-solution-content::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+    
     /* Visualization styles */
     #viz-container {
       display: none;
@@ -250,7 +277,7 @@
     }
     
     #chart-canvas {
-      max-height: 300px;
+      height: 300px;
       margin-bottom: 12px;
       display: none;
     }
@@ -258,6 +285,9 @@
     #table-container,
     #raw-container {
       display: none;
+      max-height: 300px;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
     
     .data-table {
@@ -535,10 +565,11 @@
       const vizButtons = document.querySelectorAll('.viz-btn');
       if (data.dataType === 'math') {
         vizButtons[0].textContent = 'Solution';
-        vizButtons[0].onclick = showSolution;
+        vizButtons[0].setAttribute('onclick', 'showSolution()');
         vizButtons[1].textContent = 'Graph';
-        vizButtons[1].onclick = showChart;
+        vizButtons[1].setAttribute('onclick', 'showChart()');
         vizButtons[2].textContent = 'Original';
+        vizButtons[2].setAttribute('onclick', 'showRaw()');
         showSolution(); // Default to solution view
       } else {
         vizButtons[0].textContent = 'Chart';
@@ -568,7 +599,7 @@
       if (currentData && currentData.dataType === 'math') {
         // Display the solution with LaTeX rendering
         const solutionHtml = parseMarkdown(currentData.data.solution);
-        tableContainer.innerHTML = `<div style="padding: 20px; color: #e0e0e0; line-height: 1.8;">${solutionHtml}</div>`;
+        tableContainer.innerHTML = `<div class="math-solution-content" style="padding: 20px; color: #e0e0e0; line-height: 1.8; overflow-y: auto; max-height: 280px;">${solutionHtml}</div>`;
         
         // Render LaTeX
         renderMathInElement(tableContainer, {
@@ -636,12 +667,24 @@
         btn.classList.remove('active');
       });
       
-      if (currentView === 'chart') {
-        document.querySelector('.viz-btn:nth-child(1)').classList.add('active');
-      } else if (currentView === 'table') {
-        document.querySelector('.viz-btn:nth-child(2)').classList.add('active');
+      // For math mode, adjust the button index based on current view
+      if (currentData && currentData.dataType === 'math') {
+        if (currentView === 'solution') {
+          document.querySelector('.viz-btn:nth-child(1)').classList.add('active');
+        } else if (currentView === 'chart') {
+          document.querySelector('.viz-btn:nth-child(2)').classList.add('active');
+        } else {
+          document.querySelector('.viz-btn:nth-child(3)').classList.add('active');
+        }
       } else {
-        document.querySelector('.viz-btn:nth-child(3)').classList.add('active');
+        // For other data types
+        if (currentView === 'chart') {
+          document.querySelector('.viz-btn:nth-child(1)').classList.add('active');
+        } else if (currentView === 'table') {
+          document.querySelector('.viz-btn:nth-child(2)').classList.add('active');
+        } else {
+          document.querySelector('.viz-btn:nth-child(3)').classList.add('active');
+        }
       }
     }
     
@@ -780,9 +823,12 @@
         const func = new Function('x', `return ${functionStr}`);
         
         // Set up coordinate system
-        const padding = 20;
-        const width = chartCanvas.width - 2 * padding;
-        const height = chartCanvas.height - 2 * padding;
+        const paddingLeft = 40;  // More space for y-axis labels
+        const paddingRight = 20;
+        const paddingTop = 20;
+        const paddingBottom = 30; // Space for x-axis labels
+        const width = chartCanvas.width - paddingLeft - paddingRight;
+        const height = chartCanvas.height - paddingTop - paddingBottom;
         
         // Define the viewing window
         const xMin = -10;
@@ -816,20 +862,20 @@
         ctx.lineWidth = 1;
         
         // X-axis
-        const xAxisY = padding + height * (yMax / yRange);
-        if (xAxisY >= padding && xAxisY <= padding + height) {
+        const xAxisY = paddingTop + height * (yMax / yRange);
+        if (xAxisY >= paddingTop && xAxisY <= paddingTop + height) {
           ctx.beginPath();
-          ctx.moveTo(padding, xAxisY);
-          ctx.lineTo(padding + width, xAxisY);
+          ctx.moveTo(paddingLeft, xAxisY);
+          ctx.lineTo(paddingLeft + width, xAxisY);
           ctx.stroke();
         }
         
         // Y-axis
-        const yAxisX = padding + width * (-xMin / xRange);
-        if (yAxisX >= padding && yAxisX <= padding + width) {
+        const yAxisX = paddingLeft + width * (-xMin / xRange);
+        if (yAxisX >= paddingLeft && yAxisX <= paddingLeft + width) {
           ctx.beginPath();
-          ctx.moveTo(yAxisX, padding);
-          ctx.lineTo(yAxisX, padding + height);
+          ctx.moveTo(yAxisX, paddingTop);
+          ctx.lineTo(yAxisX, paddingTop + height);
           ctx.stroke();
         }
         
@@ -839,20 +885,24 @@
         
         // Vertical grid lines
         for (let x = Math.ceil(xMin); x <= xMax; x++) {
-          const screenX = padding + width * ((x - xMin) / xRange);
+          const screenX = paddingLeft + width * ((x - xMin) / xRange);
           ctx.beginPath();
-          ctx.moveTo(screenX, padding);
-          ctx.lineTo(screenX, padding + height);
+          ctx.moveTo(screenX, paddingTop);
+          ctx.lineTo(screenX, paddingTop + height);
           ctx.stroke();
         }
         
         // Horizontal grid lines
-        const yStep = Math.pow(10, Math.floor(Math.log10(yRange / 5)));
+        let yStep = Math.pow(10, Math.floor(Math.log10(yRange / 5)));
+        // Ensure yStep is reasonable
+        if (yStep < 0.1) yStep = 0.1;
+        if (yStep > yRange / 2) yStep = yRange / 5;
+        
         for (let y = Math.ceil(yMin / yStep) * yStep; y <= yMax; y += yStep) {
-          const screenY = padding + height * (1 - (y - yMin) / yRange);
+          const screenY = paddingTop + height * (1 - (y - yMin) / yRange);
           ctx.beginPath();
-          ctx.moveTo(padding, screenY);
-          ctx.lineTo(padding + width, screenY);
+          ctx.moveTo(paddingLeft, screenY);
+          ctx.lineTo(paddingLeft + width, screenY);
           ctx.stroke();
         }
         
@@ -869,8 +919,8 @@
           try {
             const y = func(x);
             if (isFinite(y)) {
-              const screenX = padding + px;
-              const screenY = padding + height * (1 - (y - yMin) / yRange);
+              const screenX = paddingLeft + px;
+              const screenY = paddingTop + height * (1 - (y - yMin) / yRange);
               
               if (firstPoint) {
                 ctx.moveTo(screenX, screenY);
@@ -896,16 +946,20 @@
         
         // X-axis labels
         for (let x = Math.ceil(xMin); x <= xMax; x += 2) {
-          const screenX = padding + width * ((x - xMin) / xRange);
-          ctx.fillText(x.toString(), screenX, padding + height + 5);
+          const screenX = paddingLeft + width * ((x - xMin) / xRange);
+          ctx.fillText(x.toString(), screenX, paddingTop + height + 5);
         }
         
         // Y-axis labels
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
         for (let y = Math.ceil(yMin / yStep) * yStep; y <= yMax; y += yStep) {
-          const screenY = padding + height * (1 - (y - yMin) / yRange);
-          ctx.fillText(y.toFixed(1), padding - 5, screenY);
+          const screenY = paddingTop + height * (1 - (y - yMin) / yRange);
+          // Format the number appropriately
+          const label = Math.abs(y) < 0.01 && y !== 0 ? y.toExponential(1) : 
+                       Math.abs(y) >= 1000 ? y.toExponential(1) : 
+                       Number.isInteger(y) ? y.toString() : y.toFixed(1);
+          ctx.fillText(label, paddingLeft - 5, screenY);
         }
         
       } catch (error) {
