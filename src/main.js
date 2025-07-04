@@ -107,6 +107,8 @@ function createOverlay(text) {
     transparent: true,
     backgroundColor: '#00000000',
     hasShadow: false,
+    movable: false,
+    resizable: false,
     webPreferences: { 
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -130,33 +132,86 @@ function createOverlay(text) {
  */
 async function summarizeSelection() {
   console.log('[Hotkey pressed]');
-  const selectedText = clipboard.readText().trim();
-  console.log('[Clipboard contains]:', JSON.stringify(selectedText));
-
-  if (!selectedText) {
-    return createOverlay('Please copy text (Ctrl+C) before pressing the hotkey.');
-  }
-
-  // Store original text for follow-ups
-  originalSelectedText = selectedText;
-
-  const prompt = buildPrompt(selectedText);
-  console.log('[Prompt]:', prompt);
-
-  let aiResponse;
+  
+  // Store current clipboard content
+  const originalClipboard = clipboard.readText();
+  
+  // Get the focused window to send copy command
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  
+  // Import nut-js for keyboard simulation
+  const { keyboard, Key } = await import('@nut-tree-fork/nut-js');
+  
   try {
-    const result = await ai.models.generateContent({
-      model: 'gemini-1.5-pro',
-      contents: prompt
-    });
-    aiResponse = result.text.trim();
-    console.log('[AI responded]');
-  } catch (error) {
-    console.error('[AI error]:', error);
-    aiResponse = `API Error: ${error.message}`;
-  }
+    // Cross-platform copy
+    if (process.platform === 'darwin') {
+      // Mac: Cmd+C
+      await keyboard.pressKey(Key.LeftCmd, Key.C);
+      await keyboard.releaseKey(Key.LeftCmd, Key.C);
+    } else {
+      // Windows/Linux: Ctrl+C
+      await keyboard.pressKey(Key.LeftControl, Key.C);
+      await keyboard.releaseKey(Key.LeftControl, Key.C);
+    }
+    
+    // Small delay to ensure clipboard is updated
+    await new Promise(resolve => setTimeout(resolve, 150));
+    
+    // Read the selected text
+    const selectedText = clipboard.readText().trim();
+    console.log('[Selected text]:', JSON.stringify(selectedText));
+    
+    // Check if we got new text
+    if (!selectedText || selectedText === originalClipboard) {
+      return createOverlay('Please select text before pressing the hotkey.');
+    }
+    
+    // Store original text for follow-ups
+    originalSelectedText = selectedText;
+    
+    // Restore original clipboard content
+    clipboard.writeText(originalClipboard);
 
-  createOverlay(aiResponse);
+    const prompt = buildPrompt(selectedText);
+    console.log('[Prompt]:', prompt);
+
+    let aiResponse;
+    try {
+      const result = await ai.models.generateContent({
+        model: 'gemini-1.5-pro',
+        contents: prompt
+      });
+      aiResponse = result.text.trim();
+      console.log('[AI responded]');
+    } catch (error) {
+      console.error('[AI error]:', error);
+      aiResponse = `API Error: ${error.message}`;
+    }
+
+    createOverlay(aiResponse);
+    
+  } catch (error) {
+    console.error('[Copy error]:', error);
+    // Fallback to clipboard content if copy fails
+    const clipboardText = clipboard.readText().trim();
+    if (clipboardText) {
+      originalSelectedText = clipboardText;
+      const prompt = buildPrompt(clipboardText);
+      let aiResponse;
+      try {
+        const result = await ai.models.generateContent({
+          model: 'gemini-1.5-pro',
+          contents: prompt
+        });
+        aiResponse = result.text.trim();
+      } catch (err) {
+        aiResponse = `API Error: ${err.message}`;
+      }
+      createOverlay(aiResponse);
+    } else {
+      createOverlay('Please copy text (Ctrl+C) before pressing the hotkey.');
+    }
+  }
 }
 
 // Close overlay request
