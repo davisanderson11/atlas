@@ -97,7 +97,14 @@ export class RewindHandler {
     
     // Monitor power/system events
     powerMonitor.on('speed-limit-change', () => {
-      this.updateSystemLoad();
+      // Force a system load check when power state changes
+      if (this.lastCaptureMs > 150) {
+        this.systemLoad = 'high';
+      } else if (this.lastCaptureMs > 100) {
+        this.systemLoad = 'medium';
+      } else {
+        this.systemLoad = 'low';
+      }
     });
   }
 

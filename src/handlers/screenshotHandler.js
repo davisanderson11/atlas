@@ -34,7 +34,7 @@ export class ScreenshotHandler {
       frame: false,
       alwaysOnTop: true,
       skipTaskbar: true,
-      focusable: false,  // Don't steal focus
+      focusable: true,   // Need focus for keyboard events
       show: false,       // Don't show immediately
       webPreferences: {
         nodeIntegration: false,
@@ -45,9 +45,9 @@ export class ScreenshotHandler {
     
     this.captureWindow.loadFile(join(dirname(__dirname), 'capture.html'));
     
-    // Show window after it's ready, without focusing
+    // Show window after it's ready
     this.captureWindow.once('ready-to-show', () => {
-      this.captureWindow.showInactive(); // Show without focusing
+      this.captureWindow.show(); // Show and focus to receive keyboard events
       this.captureWindow.setIgnoreMouseEvents(false);
       this.captureWindow.setAlwaysOnTop(true, 'screen-saver'); // Highest level
     });
