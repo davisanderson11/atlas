@@ -9,7 +9,8 @@ import {
   BrowserWindow,
   clipboard,
   screen,
-  ipcMain
+  ipcMain,
+  dialog
 } from 'electron';
 import { GoogleGenAI } from '@google/genai';
 import { homedir } from 'os';
@@ -23,6 +24,7 @@ import { ScreenshotHandler } from './handlers/screenshotHandler.js';
 import { MathHandler } from './handlers/mathHandler.js';
 import { DataHandler } from './handlers/dataHandler.js';
 import { RewindHandler } from './handlers/rewindHandler.js';
+import { BookmarkHandler } from './handlers/bookmarkHandler.js';
 
 // Derive __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -74,9 +76,11 @@ const screenshotHandler = new ScreenshotHandler(ai);
 const mathHandler = new MathHandler(ai);
 const dataHandler = new DataHandler(ai);
 const rewindHandler = new RewindHandler(ai);
+const bookmarkHandler = new BookmarkHandler(ai);
 
 let overlayWindow;
 let welcomeWindow;
+let bookmarkWindow;
 let privacyMonitorInterval = null;
 
 // Store original context for follow-ups
@@ -441,6 +445,152 @@ ipcMain.on('welcome-close', () => {
   }
 });
 
+// Bookmark window controls
+ipcMain.on('bookmarks-minimize', () => {
+  if (bookmarkWindow && !bookmarkWindow.isDestroyed()) {
+    bookmarkWindow.minimize();
+  }
+});
+
+ipcMain.on('bookmarks-maximize', () => {
+  if (bookmarkWindow && !bookmarkWindow.isDestroyed()) {
+    if (bookmarkWindow.isMaximized()) {
+      bookmarkWindow.unmaximize();
+    } else {
+      bookmarkWindow.maximize();
+    }
+  }
+});
+
+ipcMain.on('bookmarks-close', () => {
+  if (bookmarkWindow && !bookmarkWindow.isDestroyed()) {
+    bookmarkWindow.close();
+  }
+});
+
+// Bookmark IPC handlers
+ipcMain.handle('bookmarks-load', async () => {
+  try {
+    return await bookmarkHandler.loadBookmarks();
+  } catch (error) {
+    console.error('[IPC] Failed to load bookmarks:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('bookmarks-search', async (event, query) => {
+  try {
+    return await bookmarkHandler.searchBookmarks(query);
+  } catch (error) {
+    console.error('[IPC] Failed to search bookmarks:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('bookmarks-delete', async (event, bookmarkId) => {
+  try {
+    const result = await bookmarkHandler.deleteBookmark(bookmarkId);
+    
+    // Notify viewer window if open
+    if (bookmarkWindow && !bookmarkWindow.isDestroyed()) {
+      bookmarkWindow.webContents.send('bookmark-deleted', bookmarkId);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('[IPC] Failed to delete bookmark:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('bookmarks-update', async (event, bookmarkId, updates) => {
+  try {
+    return await bookmarkHandler.updateBookmark(bookmarkId, updates);
+  } catch (error) {
+    console.error('[IPC] Failed to update bookmark:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('bookmarks-export', async (event, exportPath) => {
+  try {
+    const count = await bookmarkHandler.exportBookmarks(exportPath);
+    return { success: true, count };
+  } catch (error) {
+    console.error('[IPC] Failed to export bookmarks:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('bookmarks-import', async (event, importPath) => {
+  try {
+    const count = await bookmarkHandler.importBookmarks(importPath);
+    
+    // Refresh viewer if open
+    if (bookmarkWindow && !bookmarkWindow.isDestroyed()) {
+      bookmarkWindow.webContents.send('bookmarks-refresh');
+    }
+    
+    return { success: true, count };
+  } catch (error) {
+    console.error('[IPC] Failed to import bookmarks:', error);
+    throw error;
+  }
+});
+
+// File dialog handlers for bookmarks
+ipcMain.handle('bookmarks-export-dialog', async () => {
+  const result = await dialog.showSaveDialog(bookmarkWindow, {
+    title: 'Export Bookmarks',
+    defaultPath: `atlas-bookmarks-${new Date().toISOString().split('T')[0]}.json`,
+    filters: [
+      { name: 'JSON Files', extensions: ['json'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+  
+  if (!result.canceled && result.filePath) {
+    try {
+      const count = await bookmarkHandler.exportBookmarks(result.filePath);
+      return { success: true, count };
+    } catch (error) {
+      console.error('[IPC] Failed to export bookmarks:', error);
+      throw error;
+    }
+  }
+  
+  return { success: false };
+});
+
+ipcMain.handle('bookmarks-import-dialog', async () => {
+  const result = await dialog.showOpenDialog(bookmarkWindow, {
+    title: 'Import Bookmarks',
+    filters: [
+      { name: 'JSON Files', extensions: ['json'] },
+      { name: 'All Files', extensions: ['*'] }
+    ],
+    properties: ['openFile']
+  });
+  
+  if (!result.canceled && result.filePaths.length > 0) {
+    try {
+      const count = await bookmarkHandler.importBookmarks(result.filePaths[0]);
+      
+      // Refresh viewer
+      if (bookmarkWindow && !bookmarkWindow.isDestroyed()) {
+        bookmarkWindow.webContents.send('bookmarks-refresh');
+      }
+      
+      return { success: true, count };
+    } catch (error) {
+      console.error('[IPC] Failed to import bookmarks:', error);
+      throw error;
+    }
+  }
+  
+  return { success: false };
+});
+
 // Settings handlers
 ipcMain.handle('get-settings', () => {
   return config;
@@ -561,6 +711,21 @@ app.whenReady().then(() => {
     console.log('[Rewind feature disabled]');
   }
   
+  // Register bookmark shortcuts
+  if (config.features.bookmarks.enabled) {
+    try {
+      // Register create bookmark shortcut
+      const bookmarkCreateRegistered = globalShortcut.register(config.shortcuts.bookmarkCreate, createBookmark);
+      console.log('[Bookmark create shortcut registered]:', bookmarkCreateRegistered);
+      
+      // Register view bookmarks shortcut
+      const bookmarkViewRegistered = globalShortcut.register(config.shortcuts.bookmarkView, showBookmarkViewer);
+      console.log('[Bookmark view shortcut registered]:', bookmarkViewRegistered);
+    } catch (error) {
+      console.error('[Bookmark shortcut registration error]:', error);
+    }
+  }
+  
   // Monitor active window for privacy (only if rewind is enabled)
   if (config.features.rewind.enabled) {
     privacyMonitorInterval = setInterval(() => {
@@ -636,4 +801,81 @@ async function triggerRewind() {
     console.error('[Rewind error]:', error);
     createOverlay(`Error analyzing activity: ${error.message}`);
   }
+}
+
+/**
+ * Create a temporal bookmark
+ */
+async function createBookmark() {
+  console.log('[Bookmark creation triggered]');
+  
+  try {
+    // Show immediate feedback
+    createOverlay('Creating temporal bookmark...');
+    
+    // Create the bookmark
+    const bookmark = await bookmarkHandler.createBookmark();
+    
+    // Show success with context
+    createOverlay(`✓ Bookmark saved!\n\n${bookmark.aiContext}`);
+    
+    // Notify viewer window if open
+    if (bookmarkWindow && !bookmarkWindow.isDestroyed()) {
+      bookmarkWindow.webContents.send('bookmark-created', bookmark);
+    }
+    
+    // Auto-close overlay after 3 seconds
+    setTimeout(() => {
+      if (overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow.close();
+      }
+    }, 3000);
+    
+  } catch (error) {
+    console.error('[Bookmark creation error]:', error);
+    createOverlay(`Error creating bookmark: ${error.message}`);
+  }
+}
+
+/**
+ * Show bookmark viewer window
+ */
+async function showBookmarkViewer() {
+  console.log('[Bookmark viewer triggered]');
+  
+  // Prevent multiple viewer windows
+  if (bookmarkWindow && !bookmarkWindow.isDestroyed()) {
+    bookmarkWindow.focus();
+    return;
+  }
+  
+  // Create bookmark viewer window
+  bookmarkWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: join(__dirname, 'bookmarks-preload.js')
+    },
+    center: true,
+    resizable: true,
+    minimizable: true,
+    maximizable: true,
+    frame: false,
+    transparent: true,
+    title: 'Atlas Bookmarks',
+    show: false,
+    backgroundColor: '#1a1a1a'
+  });
+  
+  bookmarkWindow.loadFile(join(__dirname, 'bookmarks.html'));
+  
+  bookmarkWindow.once('ready-to-show', () => {
+    bookmarkWindow.show();
+  });
+  
+  bookmarkWindow.on('closed', () => {
+    bookmarkWindow = null;
+  });
 }

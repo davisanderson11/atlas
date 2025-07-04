@@ -21,6 +21,11 @@ export const config = {
       enabled: rewindEnabled,
       bufferDuration: 10, // seconds
       maxFrames: 30
+    },
+    bookmarks: {
+      enabled: true,
+      maxBookmarks: 100, // Maximum number of bookmarks to store
+      storagePath: '.atlas/bookmarks' // Relative to user home
     }
   },
   
@@ -40,6 +45,8 @@ export const config = {
   // Keyboard Shortcuts
   shortcuts: {
     main: 'CommandOrControl+Shift+Enter',
-    rewind: "CommandOrControl+Shift+'" // Ctrl+Shift+' or Cmd+Shift+'
+    rewind: "CommandOrControl+Shift+'", // Ctrl+Shift+' or Cmd+Shift+'
+    bookmarkCreate: 'CommandOrControl+Shift+/', // Ctrl+Shift+? (/ key with shift)
+    bookmarkView: 'CommandOrControl+Shift+;' // Ctrl+Shift+;
   }
 };

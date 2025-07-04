@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atlas Bookmarks</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      overflow: hidden;
+      user-select: none;
+      -webkit-app-region: no-drag;
+    }
+
+    /* Window Controls */
+    .window-controls {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 32px;
+      background: #0f0f0f;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 12px;
+      -webkit-app-region: drag;
+      z-index: 1000;
+    }
+
+    .window-title {
+      font-size: 14px;
+      color: #999;
+      flex: 1;
+      text-align: center;
+    }
+
+    .window-buttons {
+      display: flex;
+      gap: 8px;
+      -webkit-app-region: no-drag;
+    }
+
+    .window-button {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .window-button:hover {
+      opacity: 0.8;
+    }
+
+    .close { background: #ff5f57; }
+    .minimize { background: #ffbd2e; }
+    .maximize { background: #28ca42; }
+
+    /* Main Layout */
+    .container {
+      display: flex;
+      height: calc(100vh - 32px);
+      margin-top: 32px;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      background: #0f0f0f;
+      border-right: 1px solid #2a2a2a;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .search-container {
+      padding: 16px;
+      border-bottom: 1px solid #2a2a2a;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 10px 16px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-input:focus {
+      border-color: #0099ff;
+    }
+
+    .search-input::placeholder {
+      color: #666;
+    }
+
+    /* Bookmarks List */
+    .bookmarks-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .bookmarks-list::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .bookmarks-list::-webkit-scrollbar-track {
+      background: #0f0f0f;
+    }
+
+    .bookmarks-list::-webkit-scrollbar-thumb {
+      background: #2a2a2a;
+      border-radius: 4px;
+    }
+
+    .bookmarks-list::-webkit-scrollbar-thumb:hover {
+      background: #3a3a3a;
+    }
+
+    .bookmark-item {
+      padding: 12px;
+      margin-bottom: 4px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .bookmark-item:hover {
+      background: #252525;
+      border-color: #3a3a3a;
+    }
+
+    .bookmark-item.selected {
+      background: #0a4d8a;
+      border-color: #0099ff;
+    }
+
+    .bookmark-time {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 4px;
+    }
+
+    .bookmark-context {
+      font-size: 13px;
+      color: #ccc;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Detail View */
+    .detail-view {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .detail-view.active {
+      display: block;
+    }
+
+    .detail-header {
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #2a2a2a;
+    }
+
+    .detail-timestamp {
+      font-size: 24px;
+      font-weight: 600;
+      color: #e0e0e0;
+      margin-bottom: 8px;
+    }
+
+    .detail-date {
+      font-size: 14px;
+      color: #888;
+    }
+
+    /* Content Sections */
+    .content-section {
+      margin-bottom: 32px;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #0099ff;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-content {
+      background: #0f0f0f;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    /* Screenshot */
+    .screenshot-container {
+      position: relative;
+      overflow: hidden;
+      border-radius: 8px;
+      max-height: 400px;
+    }
+
+    .screenshot-img {
+      width: 100%;
+      height: auto;
+      display: block;
+      cursor: zoom-in;
+    }
+
+    /* Clipboard Content */
+    .clipboard-text {
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #ccc;
+    }
+
+    .clipboard-image {
+      max-width: 300px;
+      max-height: 200px;
+      border-radius: 4px;
+      margin-top: 8px;
+    }
+
+    /* AI Context */
+    .ai-context {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #e0e0e0;
+    }
+
+    /* Notes */
+    .notes-container {
+      position: relative;
+    }
+
+    .notes-textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 12px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 14px;
+      line-height: 1.5;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .notes-textarea:focus {
+      border-color: #0099ff;
+    }
+
+    .save-notes-btn {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      padding: 6px 12px;
+      background: #0099ff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .notes-textarea:focus + .save-notes-btn,
+    .save-notes-btn:hover {
+      opacity: 1;
+    }
+
+    /* Actions */
+    .actions-container {
+      padding: 16px 24px;
+      background: #0f0f0f;
+      border-top: 1px solid #2a2a2a;
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .action-button {
+      padding: 8px 16px;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .action-button:hover {
+      background: #252525;
+      border-color: #3a3a3a;
+    }
+
+    .action-button.danger {
+      color: #ff5f57;
+      border-color: #ff5f57;
+    }
+
+    .action-button.danger:hover {
+      background: #ff5f57;
+      color: white;
+    }
+
+    /* Empty State */
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #666;
+      text-align: center;
+      padding: 40px;
+    }
+
+    .empty-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .empty-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #888;
+    }
+
+    .empty-description {
+      font-size: 14px;
+      line-height: 1.5;
+      max-width: 400px;
+    }
+
+    /* Loading */
+    .loading {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 14px;
+      color: #888;
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    /* Keyboard Hints */
+    .keyboard-hint {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      background: #0f0f0f;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: #666;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .keyboard-hint kbd {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #ccc;
+    }
+  </style>
+</head>
+<body>
+  <!-- Window Controls -->
+  <div class="window-controls">
+    <div class="window-buttons">
+      <button class="window-button minimize" id="minimize"></button>
+      <button class="window-button maximize" id="maximize"></button>
+      <button class="window-button close" id="close"></button>
+    </div>
+    <div class="window-title">Atlas Temporal Bookmarks</div>
+    <div style="width: 36px;"></div> <!-- Spacer for centering -->
+  </div>
+
+  <!-- Main Container -->
+  <div class="container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="search-container">
+        <input type="text" class="search-input" placeholder="Search bookmarks..." id="searchInput">
+      </div>
+      <div class="bookmarks-list" id="bookmarksList">
+        <!-- Bookmarks will be populated here -->
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Empty State -->
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">📚</div>
+        <div class="empty-title">No Bookmarks Yet</div>
+        <div class="empty-description">
+          Press <kbd>Ctrl+Shift+?</kbd> at any moment to create a temporal bookmark.
+          Your bookmarks will appear here.
+        </div>
+      </div>
+
+      <!-- Detail View -->
+      <div class="detail-view" id="detailView">
+        <div class="detail-header">
+          <div class="detail-timestamp" id="detailTimestamp"></div>
+          <div class="detail-date" id="detailDate"></div>
+        </div>
+
+        <!-- Screenshot Section -->
+        <div class="content-section">
+          <h3 class="section-title">
+            <span>📸</span>
+            Screenshot
+          </h3>
+          <div class="section-content">
+            <div class="screenshot-container">
+              <img class="screenshot-img" id="screenshotImg" alt="Screenshot">
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Context Section -->
+        <div class="content-section">
+          <h3 class="section-title">
+            <span>🤖</span>
+            AI Context
+          </h3>
+          <div class="section-content">
+            <div class="ai-context" id="aiContext"></div>
+          </div>
+        </div>
+
+        <!-- Clipboard Section -->
+        <div class="content-section" id="clipboardSection" style="display: none;">
+          <h3 class="section-title">
+            <span>📋</span>
+            Clipboard Content
+          </h3>
+          <div class="section-content">
+            <div class="clipboard-text" id="clipboardText"></div>
+            <img class="clipboard-image" id="clipboardImage" style="display: none;">
+          </div>
+        </div>
+
+        <!-- Notes Section -->
+        <div class="content-section">
+          <h3 class="section-title">
+            <span>📝</span>
+            Notes
+          </h3>
+          <div class="section-content">
+            <div class="notes-container">
+              <textarea class="notes-textarea" id="notesTextarea" placeholder="Add your notes here..."></textarea>
+              <button class="save-notes-btn" id="saveNotesBtn">Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions-container" id="actionsContainer" style="display: none;">
+        <button class="action-button" id="exportBtn">Export</button>
+        <button class="action-button danger" id="deleteBtn">Delete</button>
+      </div>
+    </main>
+  </div>
+
+  <!-- Loading Indicator -->
+  <div class="loading" id="loading">Loading bookmarks...</div>
+
+  <!-- Keyboard Hints -->
+  <div class="keyboard-hint">
+    <span><kbd>↑</kbd> <kbd>↓</kbd> Navigate</span>
+    <span><kbd>Delete</kbd> Remove</span>
+    <span><kbd>Esc</kbd> Close</span>
+  </div>
+
+  <script>
+    // Window controls
+    document.getElementById('minimize').addEventListener('click', () => {
+      window.bookmarksAPI.minimize();
+    });
+
+    document.getElementById('maximize').addEventListener('click', () => {
+      window.bookmarksAPI.maximize();
+    });
+
+    document.getElementById('close').addEventListener('click', () => {
+      window.bookmarksAPI.close();
+    });
+
+    // Bookmark management
+    let bookmarks = [];
+    let selectedBookmark = null;
+    let currentBookmarkId = null;
+
+    // Load bookmarks on startup
+    async function loadBookmarks() {
+      document.getElementById('loading').classList.add('active');
+      
+      try {
+        bookmarks = await window.bookmarksAPI.loadBookmarks();
+        renderBookmarksList();
+        
+        if (bookmarks.length > 0) {
+          selectBookmark(bookmarks[0]);
+        }
+      } catch (error) {
+        console.error('Failed to load bookmarks:', error);
+      } finally {
+        document.getElementById('loading').classList.remove('active');
+      }
+    }
+
+    // Render bookmarks list
+    function renderBookmarksList(filteredBookmarks = null) {
+      const list = document.getElementById('bookmarksList');
+      const bookmarksToRender = filteredBookmarks || bookmarks;
+      
+      list.innerHTML = '';
+      
+      if (bookmarksToRender.length === 0) {
+        document.getElementById('emptyState').style.display = 'flex';
+        document.getElementById('detailView').classList.remove('active');
+        document.getElementById('actionsContainer').style.display = 'none';
+        return;
+      }
+      
+      document.getElementById('emptyState').style.display = 'none';
+      
+      bookmarksToRender.forEach(bookmark => {
+        const item = document.createElement('div');
+        item.className = 'bookmark-item';
+        item.dataset.bookmarkId = bookmark.id;
+        
+        const time = new Date(bookmark.timestamp);
+        const timeStr = time.toLocaleTimeString();
+        const dateStr = time.toLocaleDateString();
+        
+        item.innerHTML = `
+          <div class="bookmark-time">${timeStr} - ${dateStr}</div>
+          <div class="bookmark-context">${bookmark.aiContext || 'No context available'}</div>
+        `;
+        
+        item.addEventListener('click', () => selectBookmark(bookmark));
+        
+        list.appendChild(item);
+      });
+    }
+
+    // Select a bookmark
+    function selectBookmark(bookmark) {
+      selectedBookmark = bookmark;
+      currentBookmarkId = bookmark.id;
+      
+      // Update selection in list
+      document.querySelectorAll('.bookmark-item').forEach(item => {
+        item.classList.toggle('selected', item.dataset.bookmarkId === bookmark.id);
+      });
+      
+      // Show detail view
+      document.getElementById('detailView').classList.add('active');
+      document.getElementById('actionsContainer').style.display = 'flex';
+      
+      // Update detail view content
+      const time = new Date(bookmark.timestamp);
+      document.getElementById('detailTimestamp').textContent = time.toLocaleTimeString();
+      document.getElementById('detailDate').textContent = time.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      
+      // Screenshot
+      if (bookmark.screenshot) {
+        document.getElementById('screenshotImg').src = `data:image/png;base64,${bookmark.screenshot}`;
+      }
+      
+      // AI Context
+      document.getElementById('aiContext').textContent = bookmark.aiContext || 'No context available';
+      
+      // Clipboard
+      const clipboardSection = document.getElementById('clipboardSection');
+      if (bookmark.clipboard.text || bookmark.clipboard.hasImage) {
+        clipboardSection.style.display = 'block';
+        
+        if (bookmark.clipboard.text) {
+          document.getElementById('clipboardText').textContent = bookmark.clipboard.text;
+          document.getElementById('clipboardText').style.display = 'block';
+        } else {
+          document.getElementById('clipboardText').style.display = 'none';
+        }
+        
+        if (bookmark.clipboard.imageData) {
+          const img = document.getElementById('clipboardImage');
+          img.src = `data:image/png;base64,${bookmark.clipboard.imageData}`;
+          img.style.display = 'block';
+        } else {
+          document.getElementById('clipboardImage').style.display = 'none';
+        }
+      } else {
+        clipboardSection.style.display = 'none';
+      }
+      
+      // Notes
+      document.getElementById('notesTextarea').value = bookmark.userNote || '';
+    }
+
+    // Search functionality
+    let searchTimeout;
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        const query = e.target.value.trim();
+        if (query) {
+          searchBookmarks(query);
+        } else {
+          renderBookmarksList();
+        }
+      }, 300);
+    });
+
+    async function searchBookmarks(query) {
+      try {
+        const filtered = await window.bookmarksAPI.searchBookmarks(query);
+        renderBookmarksList(filtered);
+      } catch (error) {
+        console.error('Search failed:', error);
+      }
+    }
+
+    // Save notes
+    document.getElementById('saveNotesBtn').addEventListener('click', async () => {
+      if (!currentBookmarkId) return;
+      
+      const notes = document.getElementById('notesTextarea').value;
+      
+      try {
+        await window.bookmarksAPI.updateBookmark(currentBookmarkId, { userNote: notes });
+        
+        // Update local data
+        const bookmark = bookmarks.find(b => b.id === currentBookmarkId);
+        if (bookmark) {
+          bookmark.userNote = notes;
+        }
+        
+        // Flash save button
+        const btn = document.getElementById('saveNotesBtn');
+        btn.textContent = 'Saved!';
+        setTimeout(() => {
+          btn.textContent = 'Save';
+        }, 1000);
+      } catch (error) {
+        console.error('Failed to save notes:', error);
+      }
+    });
+
+    // Delete bookmark
+    document.getElementById('deleteBtn').addEventListener('click', async () => {
+      if (!currentBookmarkId || !confirm('Delete this bookmark?')) return;
+      
+      try {
+        await window.bookmarksAPI.deleteBookmark(currentBookmarkId);
+        
+        // Remove from local data
+        bookmarks = bookmarks.filter(b => b.id !== currentBookmarkId);
+        
+        // Re-render and select next
+        renderBookmarksList();
+        if (bookmarks.length > 0) {
+          selectBookmark(bookmarks[0]);
+        }
+      } catch (error) {
+        console.error('Failed to delete bookmark:', error);
+      }
+    });
+
+    // Export bookmarks
+    document.getElementById('exportBtn').addEventListener('click', async () => {
+      try {
+        await window.bookmarksAPI.exportBookmarks();
+      } catch (error) {
+        console.error('Failed to export bookmarks:', error);
+      }
+    });
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        window.bookmarksAPI.close();
+      } else if (e.key === 'Delete' && currentBookmarkId) {
+        document.getElementById('deleteBtn').click();
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        navigateBookmarks(e.key === 'ArrowDown' ? 1 : -1);
+      }
+    });
+
+    function navigateBookmarks(direction) {
+      if (bookmarks.length === 0) return;
+      
+      const currentIndex = bookmarks.findIndex(b => b.id === currentBookmarkId);
+      const newIndex = Math.max(0, Math.min(bookmarks.length - 1, currentIndex + direction));
+      
+      if (newIndex !== currentIndex) {
+        selectBookmark(bookmarks[newIndex]);
+        
+        // Scroll into view
+        const items = document.querySelectorAll('.bookmark-item');
+        items[newIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    // Screenshot zoom
+    document.getElementById('screenshotImg').addEventListener('click', () => {
+      // You could implement a full-screen view here
+      console.log('Screenshot clicked - could open fullscreen view');
+    });
+
+    // Listen for refresh events
+    window.addEventListener('bookmarks-refresh', () => {
+      loadBookmarks();
+    });
+    
+    // Listen for new bookmarks
+    window.addEventListener('bookmark-created', (e) => {
+      // Add to local array
+      bookmarks.unshift(e.detail);
+      
+      // Re-render
+      renderBookmarksList();
+      
+      // Select the new bookmark
+      selectBookmark(e.detail);
+    });
+    
+    // Initialize
+    loadBookmarks();
+  </script>
+</body>
+</html>
