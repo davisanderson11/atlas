@@ -35,9 +35,12 @@
     },
     "files": [
       "src/**/*",
-      "node_modules/**/*",
+      "!src/**/*.test.js",
+      "!src/**/*.spec.js",
       "package.json"
     ],
+    "asar": true,
+    "compression": "maximum",
     "extraFiles": [
       {
         "from": ".env",
