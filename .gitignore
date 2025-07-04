@@ -25,4 +25,13 @@ Thumbs.db
 
 # Build output
 dist/
-build/
+build/*
+!build/entitlements.mac.plist
+!build/icon.*
+!build/icons/
+
+# Electron-builder output
+*.unpacked/
+*.blockmap
+*.yml
+*.yaml
