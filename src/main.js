@@ -94,9 +94,17 @@ let originalSelectedText = '';
 
 function createOverlay(text) {
   console.log('[createOverlay]:', text);
+  
+  // If window exists, close it and wait a bit
   if (overlayWindow && !overlayWindow.isDestroyed()) {
-    overlayWindow.close();
+    try {
+      overlayWindow.close();
+    } catch (e) {
+      console.error('[Error closing overlay]:', e);
+    }
     overlayWindow = null;
+    // Small delay to ensure window is fully closed
+    return setTimeout(() => createOverlay(text), 100);
   }
   const { width: sw } = screen.getPrimaryDisplay().workAreaSize;
   const w = 860, h = 600;
@@ -123,13 +131,19 @@ function createOverlay(text) {
   });
   
   // Make window click-through in transparent areas
-  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  }
   
-  overlayWindow.loadFile(join(__dirname, 'index.html'));
-  overlayWindow.webContents.once('did-finish-load', () => {
-    console.log('[Sending text to overlay]:', text);
-    overlayWindow.webContents.send('overlay-text', text);
-  });
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.loadFile(join(__dirname, 'index.html'));
+    overlayWindow.webContents.once('did-finish-load', () => {
+      console.log('[Sending text to overlay]:', text);
+      if (overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow.webContents.send('overlay-text', text);
+      }
+    });
+  }
 }
 
 /**
