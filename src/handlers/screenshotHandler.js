@@ -19,6 +19,12 @@ export class ScreenshotHandler {
    * Start screen capture mode
    */
   async startCapture() {
+    // Prevent multiple captures at once
+    if (this.captureWindow && !this.captureWindow.isDestroyed()) {
+      console.log('[ScreenshotHandler] Capture already in progress');
+      return;
+    }
+    
     console.log('[ScreenshotHandler] Starting screen capture');
     
     // Get primary display
@@ -55,8 +61,10 @@ export class ScreenshotHandler {
     return new Promise((resolve, reject) => {
       // Handle area selection
       ipcMain.once('capture-area', async (event, bounds) => {
-        this.captureWindow.close();
-        this.captureWindow = null;
+        if (this.captureWindow && !this.captureWindow.isDestroyed()) {
+          this.captureWindow.close();
+          this.captureWindow = null;
+        }
         
         try {
           const screenshot = await this.captureScreenshot(bounds, primaryDisplay);
@@ -68,7 +76,7 @@ export class ScreenshotHandler {
       
       // Handle escape key
       ipcMain.once('capture-cancelled', () => {
-        if (this.captureWindow) {
+        if (this.captureWindow && !this.captureWindow.isDestroyed()) {
           this.captureWindow.close();
           this.captureWindow = null;
         }

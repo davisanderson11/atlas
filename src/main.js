@@ -263,7 +263,13 @@ async function startScreenCapture() {
       overlayWindow = null;
     }
     
-    const { screenshot, bounds } = await screenshotHandler.startCapture();
+    const captureResult = await screenshotHandler.startCapture();
+    if (!captureResult) {
+      console.log('[Screenshot capture already in progress or cancelled]');
+      return;
+    }
+    
+    const { screenshot, bounds } = captureResult;
     const result = await screenshotHandler.process(screenshot);
     
     // Store for follow-ups

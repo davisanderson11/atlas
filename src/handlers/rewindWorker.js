@@ -1,5 +1,5 @@
 // Worker thread for image comparison
-const { parentPort } = require('worker_threads');
+import { parentPort } from 'worker_threads';
 
 // Handle messages from main thread
 parentPort.on('message', (message) => {
