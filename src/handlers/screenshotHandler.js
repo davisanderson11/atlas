@@ -34,6 +34,8 @@ export class ScreenshotHandler {
       frame: false,
       alwaysOnTop: true,
       skipTaskbar: true,
+      focusable: false,  // Don't steal focus
+      show: false,       // Don't show immediately
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -41,8 +43,14 @@ export class ScreenshotHandler {
       }
     });
     
-    this.captureWindow.setIgnoreMouseEvents(false);
     this.captureWindow.loadFile(join(dirname(__dirname), 'capture.html'));
+    
+    // Show window after it's ready, without focusing
+    this.captureWindow.once('ready-to-show', () => {
+      this.captureWindow.showInactive(); // Show without focusing
+      this.captureWindow.setIgnoreMouseEvents(false);
+      this.captureWindow.setAlwaysOnTop(true, 'screen-saver'); // Highest level
+    });
     
     return new Promise((resolve, reject) => {
       // Handle area selection
