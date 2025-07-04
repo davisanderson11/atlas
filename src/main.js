@@ -81,6 +81,7 @@ const bookmarkHandler = new BookmarkHandler(ai);
 let overlayWindow;
 let welcomeWindow;
 let bookmarkWindow;
+let statusWindow;
 let privacyMonitorInterval = null;
 
 // Store original context for follow-ups
@@ -746,6 +747,12 @@ app.on('window-all-closed', e => e.preventDefault());
 app.on('before-quit', () => {
   console.log('[App] Before quit - unregistering shortcuts');
   globalShortcut.unregisterAll();
+  
+  // Close status window if open
+  if (statusWindow && !statusWindow.isDestroyed()) {
+    statusWindow.close();
+    statusWindow = null;
+  }
 });
 
 app.on('will-quit', () => {
@@ -779,7 +786,7 @@ async function triggerRewind() {
   
   if (!rewindData || rewindData.frames.length === 0) {
     console.log('[No frames in buffer]');
-    createOverlay('No recent activity captured. Rewind starts capturing after app launch.');
+    createStatus('No recent activity captured. Rewind starts capturing after app launch.', 'warning', 3000);
     return;
   }
   
@@ -804,6 +811,66 @@ async function triggerRewind() {
 }
 
 /**
+ * Create status popup for brief notifications
+ */
+function createStatus(message, type = 'info', duration = 3000) {
+  console.log('[createStatus] called with:', message, type);
+  
+  // Close existing status window if any
+  if (statusWindow && !statusWindow.isDestroyed()) {
+    statusWindow.close();
+    statusWindow = null;
+  }
+  
+  // Calculate position (top center)
+  const { width: sw } = screen.getPrimaryDisplay().workAreaSize;
+  const w = 400;
+  const h = 80;
+  const x = Math.round((sw - w) / 2);
+  const y = 50; // 50px from top
+  
+  statusWindow = new BrowserWindow({
+    x, y, width: w, height: h,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    movable: false,
+    resizable: false,
+    focusable: false,
+    webPreferences: {
+      preload: join(__dirname, 'status-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  
+  statusWindow.setIgnoreMouseEvents(true);
+  
+  statusWindow.loadFile(join(__dirname, 'status.html'));
+  
+  statusWindow.webContents.once('did-finish-load', () => {
+    if (statusWindow && !statusWindow.isDestroyed()) {
+      statusWindow.webContents.send('status-update', { message, type });
+      
+      // Auto-close after duration
+      setTimeout(() => {
+        if (statusWindow && !statusWindow.isDestroyed()) {
+          statusWindow.close();
+          statusWindow = null;
+        }
+      }, duration);
+    }
+  });
+  
+  statusWindow.on('closed', () => {
+    statusWindow = null;
+  });
+}
+
+/**
  * Create a temporal bookmark
  */
 async function createBookmark() {
@@ -811,29 +878,25 @@ async function createBookmark() {
   
   try {
     // Show immediate feedback
-    createOverlay('Creating temporal bookmark...');
+    createStatus('Creating temporal bookmark...', 'info', 1000);
     
     // Create the bookmark
     const bookmark = await bookmarkHandler.createBookmark();
     
-    // Show success with context
-    createOverlay(`✓ Bookmark saved!\n\n${bookmark.aiContext}`);
+    // Show success with context summary (truncated for status)
+    const contextPreview = bookmark.aiContext.length > 100 
+      ? bookmark.aiContext.substring(0, 97) + '...' 
+      : bookmark.aiContext;
+    createStatus(`Bookmark saved: ${contextPreview}`, 'success', 4000);
     
     // Notify viewer window if open
     if (bookmarkWindow && !bookmarkWindow.isDestroyed()) {
       bookmarkWindow.webContents.send('bookmark-created', bookmark);
     }
     
-    // Auto-close overlay after 3 seconds
-    setTimeout(() => {
-      if (overlayWindow && !overlayWindow.isDestroyed()) {
-        overlayWindow.close();
-      }
-    }, 3000);
-    
   } catch (error) {
     console.error('[Bookmark creation error]:', error);
-    createOverlay(`Error creating bookmark: ${error.message}`);
+    createStatus(`Error creating bookmark: ${error.message}`, 'error', 4000);
   }
 }
 

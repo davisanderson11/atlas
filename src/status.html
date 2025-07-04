@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atlas Status</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@mdi/font@7.2.96/css/materialdesignicons.min.css" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: transparent;
+      color: #e0e0e0;
+      overflow: hidden;
+      user-select: none;
+      -webkit-app-region: no-drag;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    .status-container {
+      background: rgba(30, 30, 30, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 16px 24px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      max-width: 500px;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .status-icon {
+      font-size: 28px;
+      color: #667eea;
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .status-message {
+      font-size: 14px;
+      line-height: 1.5;
+      color: #e0e0e0;
+      flex: 1;
+    }
+
+    /* For different status types */
+    .status-container.success .status-icon {
+      color: #28ca42;
+    }
+
+    .status-container.error .status-icon {
+      color: #ff5f57;
+    }
+
+    .status-container.warning .status-icon {
+      color: #ffbd2e;
+    }
+
+    .status-container.info .status-icon {
+      color: #667eea;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="status-container" id="statusContainer">
+    <div class="status-icon" id="statusIcon">
+      <i class="mdi mdi-book-open-page-variant-outline"></i>
+    </div>
+    <div class="status-message" id="statusMessage">
+      Loading...
+    </div>
+  </div>
+
+  <script>
+    // Listen for status updates
+    window.statusAPI.onStatusUpdate((data) => {
+      const container = document.getElementById('statusContainer');
+      const icon = document.getElementById('statusIcon');
+      const message = document.getElementById('statusMessage');
+      
+      // Update message
+      message.textContent = data.message;
+      
+      // Update container class for styling
+      container.className = `status-container ${data.type || 'info'}`;
+      
+      // Update icon based on type
+      switch(data.type) {
+        case 'success':
+          icon.innerHTML = '<i class="mdi mdi-check-circle-outline"></i>';
+          break;
+        case 'error':
+          icon.innerHTML = '<i class="mdi mdi-alert-circle-outline"></i>';
+          break;
+        case 'warning':
+          icon.innerHTML = '<i class="mdi mdi-alert-outline"></i>';
+          break;
+        case 'info':
+        default:
+          icon.innerHTML = '<i class="mdi mdi-book-open-page-variant-outline"></i>';
+          break;
+      }
+      
+      // Reset animation
+      container.style.animation = 'none';
+      setTimeout(() => {
+        container.style.animation = 'fadeIn 0.2s ease-out';
+      }, 10);
+    });
+  </script>
+</body>
+</html>
