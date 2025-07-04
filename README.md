@@ -79,13 +79,6 @@ When selecting CSV, JSON, or tabular data:
    - Screenshots and bookmarks are stored on your device
    - Be mindful when capturing sensitive information
 
-## System Requirements
-
-- **Operating Systems**: Windows 10+, macOS 10.15+, Linux
-- **Memory**: 4GB RAM minimum (8GB recommended)
-- **Storage**: 500MB for application + space for bookmarks
-- **Internet**: Required only for AI features
-
 ## Troubleshooting
 
 ### Atlas doesn't respond to hotkeys
@@ -101,12 +94,6 @@ When selecting CSV, JSON, or tabular data:
 - First response may take longer as models load
 - Check your internet connection for AI features
 - Consider closing other resource-intensive applications
-
-## Getting Help
-
-- Access the welcome screen anytime from the system tray/menu bar
-- Report issues at: https://github.com/anthropics/claude-code/issues
-- Check for updates regularly for new features and improvements
 
 ---
 
