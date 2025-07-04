@@ -39,6 +39,11 @@ let welcomeWindow;
 function detectStructuredData(text) {
   const lines = text.trim().split('\n').filter(line => line.trim());
   
+  // Math equation detection - check this early
+  if (isMathEquation(text)) {
+    return { type: 'math', data: parseMathEquation(text) };
+  }
+  
   // JSON detection first (most specific)
   try {
     const parsed = JSON.parse(text);
@@ -80,6 +85,68 @@ function detectStructuredData(text) {
   }
   
   return null;
+}
+
+/**
+ * Check if text is a math equation
+ */
+function isMathEquation(text) {
+  const trimmed = text.trim();
+  
+  // Common math patterns
+  const mathPatterns = [
+    /^[\d\s\+\-\*\/\^\(\)\.]+\s*=\s*[\d\s\+\-\*\/\^\(\)\.x]*$/, // Basic equation with =
+    /^[\d\s\+\-\*\/\^\(\)\.]+$/, // Just an expression to evaluate
+    /^[\d\s\+\-\*\/\^\(\)\.x]+\s*=\s*[\d\s\+\-\*\/\^\(\)\.x]+$/, // Equation with variable
+    /\b(sin|cos|tan|log|ln|sqrt|exp)\b/i, // Trig/log functions
+    /\b\d+x\b|\bx\d+\b/, // Algebraic terms
+    /\^[\d\(\)]+/, // Exponents
+    /\b(solve|find|calculate)\b.*\bfor\b/i, // Word problems
+  ];
+  
+  // Check if it matches any math pattern
+  const isMath = mathPatterns.some(pattern => pattern.test(trimmed));
+  
+  // Additional checks
+  const hasNumbers = /\d/.test(trimmed);
+  const hasOperators = /[\+\-\*\/\^=]/.test(trimmed);
+  const notTooLong = trimmed.length < 200; // Math expressions are usually concise
+  
+  return isMath || (hasNumbers && hasOperators && notTooLong);
+}
+
+/**
+ * Parse and solve math equation
+ */
+function parseMathEquation(text) {
+  const trimmed = text.trim();
+  
+  // Determine equation type
+  let type = 'expression';
+  let equation = trimmed;
+  let variable = null;
+  
+  if (trimmed.includes('=')) {
+    type = 'equation';
+    // Check if it has variables
+    if (/[a-zA-Z]/.test(trimmed)) {
+      type = 'algebraic';
+      // Find the variable (usually x, y, or z)
+      const varMatch = trimmed.match(/[xyz]/i);
+      variable = varMatch ? varMatch[0].toLowerCase() : 'x';
+    }
+  }
+  
+  // For now, we'll pass the equation to the AI for solving
+  // In a real implementation, we could use math.js or similar
+  return {
+    original: trimmed,
+    type: type,
+    variable: variable,
+    equation: equation,
+    // We'll let the AI handle the actual solving
+    needsAISolving: true
+  };
 }
 
 /**
@@ -334,7 +401,40 @@ async function summarizeSelection() {
     
     if (structuredData) {
       console.log('[Structured data detected]:', structuredData.type);
-      // For structured data, pass both the data and a visualization flag
+      
+      // Handle math equations differently - send to AI for step-by-step solving
+      if (structuredData.type === 'math') {
+        const mathPrompt = `Solve this math problem step-by-step. Show your work clearly:
+
+${selectedText}
+
+Please:
+1. Identify what type of problem this is
+2. Show each step of the solution
+3. Explain what you're doing in each step
+4. Give the final answer clearly
+5. If it's a function, describe its properties (domain, range, etc.)`;
+
+        console.log('[Sending math to AI for solving]');
+        
+        let aiResponse;
+        try {
+          const result = await ai.models.generateContent({
+            model: 'gemini-1.5-flash',
+            contents: mathPrompt
+          });
+          aiResponse = result.text.trim();
+          console.log('[AI solved math problem]');
+        } catch (error) {
+          console.error('[Math AI error]:', error);
+          aiResponse = `Error solving equation: ${error.message}`;
+        }
+        
+        createOverlay(aiResponse);
+        return;
+      }
+      
+      // For other structured data, use visualization
       createOverlay({
         type: 'visualization',
         dataType: structuredData.type,
