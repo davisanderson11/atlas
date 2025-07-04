@@ -162,17 +162,19 @@ async function summarizeSelection() {
     // Small delay to ensure clipboard is updated
     await new Promise(resolve => setTimeout(resolve, 150));
     
-    // Read the selected text
-    const selectedText = clipboard.readText().trim();
-    console.log('[Selected text]:', JSON.stringify(selectedText));
+    // Read the potentially new clipboard content
+    const newClipboard = clipboard.readText().trim();
+    console.log('[Clipboard after copy attempt]:', JSON.stringify(newClipboard));
     
-    // Check if we got new text
-    if (!selectedText || selectedText === originalClipboard) {
-      // No text selected - trigger screenshot mode
+    // Check if clipboard changed (meaning text was selected and copied)
+    if (!newClipboard || newClipboard === originalClipboard) {
+      // No new text was copied - trigger screenshot mode
       console.log('[No text selected - starting screen capture]');
-      clipboard.writeText(originalClipboard); // Restore clipboard first
       return startScreenCapture();
     }
+    
+    // We have new text that was selected
+    const selectedText = newClipboard;
     
     // Store original text for follow-ups
     originalSelectedText = selectedText;
@@ -270,6 +272,12 @@ app.on('will-quit', () => globalShortcut.unregisterAll());
  * Start screen capture mode
  */
 async function startScreenCapture() {
+  // Close overlay if it's open
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.close();
+    overlayWindow = null;
+  }
+  
   // Get all displays
   const displays = screen.getAllDisplays();
   const primaryDisplay = screen.getPrimaryDisplay();
@@ -309,9 +317,19 @@ async function startScreenCapture() {
     });
     
     if (sources.length > 0) {
-      // Convert the thumbnail to base64
+      // Get the full screenshot
       const screenshot = sources[0].thumbnail;
-      const imageBuffer = screenshot.toPNG();
+      
+      // Crop to selected area
+      const croppedImage = screenshot.crop({
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height
+      });
+      
+      // Convert the cropped image to base64
+      const imageBuffer = croppedImage.toPNG();
       const base64Image = imageBuffer.toString('base64');
       
       // Process with Gemini Vision
