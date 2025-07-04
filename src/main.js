@@ -223,15 +223,23 @@ async function processSelectedText(selectedText) {
       return;
     }
     
-    // 2. Check for structured data
-    const dataResult = await dataHandler.process(selectedText);
-    if (dataResult) {
-      console.log('[Structured data detected]:', dataResult.dataType);
-      createOverlay(dataResult);
-      return;
+    // 2. Check if it looks like code (before checking for data)
+    const hasCodePatterns = selectedText.includes('function') || selectedText.includes('=>') || 
+                           selectedText.includes('const ') || selectedText.includes('let ') ||
+                           selectedText.includes('if (') || selectedText.includes('class ') ||
+                           (selectedText.includes('{') && selectedText.includes('}'));
+    
+    // 3. Check for structured data only if it doesn't look like code
+    if (!hasCodePatterns) {
+      const dataResult = await dataHandler.process(selectedText);
+      if (dataResult) {
+        console.log('[Structured data detected]:', dataResult.dataType);
+        createOverlay(dataResult);
+        return;
+      }
     }
     
-    // 3. Process as regular text
+    // 4. Process as regular text (including code)
     console.log('[Processing as regular text]');
     const textResult = await textHandler.process(selectedText);
     createOverlay(textResult);

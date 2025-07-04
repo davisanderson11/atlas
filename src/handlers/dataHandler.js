@@ -13,6 +13,11 @@ export class DataHandler {
   detectStructuredData(text) {
     const lines = text.trim().split('\n').filter(line => line.trim());
     
+    // Skip if this looks like code (has common code patterns)
+    if (this.looksLikeCode(text)) {
+      return null;
+    }
+    
     // JSON detection first (most specific)
     try {
       const parsed = JSON.parse(text);
@@ -22,9 +27,11 @@ export class DataHandler {
     } catch (e) {}
     
     // SQL result detection (simple table format)
+    // More strict: require separator lines or multiple pipes per line
     if (text.includes('|') && lines.length > 2) {
-      const hasTableStructure = lines.some(line => /[|\-]{2,}/.test(line));
-      if (hasTableStructure) {
+      const hasTableStructure = lines.some(line => /^\s*[|\+\-]{3,}/.test(line));
+      const hasPipeDelimitedRows = lines.filter(line => (line.match(/\|/g) || []).length >= 2).length >= 2;
+      if (hasTableStructure || hasPipeDelimitedRows) {
         return { type: 'sql', data: this.parseSQLTable(text) };
       }
     }
@@ -112,6 +119,41 @@ export class DataHandler {
     });
     
     return { headers, rows };
+  }
+
+  /**
+   * Check if text looks like code
+   */
+  looksLikeCode(text) {
+    // Common code patterns
+    const codePatterns = [
+      /function\s+\w+\s*\(/,          // function declarations
+      /const\s+\w+\s*=/,              // const declarations
+      /let\s+\w+\s*=/,                // let declarations
+      /var\s+\w+\s*=/,                // var declarations
+      /class\s+\w+/,                  // class declarations
+      /if\s*\([^)]+\)\s*{/,          // if statements
+      /for\s*\([^)]+\)\s*{/,         // for loops
+      /while\s*\([^)]+\)\s*{/,       // while loops
+      /=>/,                           // arrow functions
+      /\{[\s\S]*\}/,                  // curly braces blocks
+      /;\s*$/m,                       // semicolons at end of lines
+      /^\s*\/\//m,                    // line comments
+      /^\s*\*/m,                      // block comments
+      /^import\s+/m,                  // import statements
+      /^export\s+/m,                  // export statements
+      /\.\w+\(/,                      // method calls
+      /\[\d+\]/,                      // array access
+      /^\s*#include/m,                // C/C++ includes
+      /^\s*def\s+/m,                  // Python functions
+      /^\s*package\s+/m,              // Java/Go packages
+    ];
+    
+    // Check if text matches multiple code patterns
+    const matchCount = codePatterns.filter(pattern => pattern.test(text)).length;
+    
+    // If it has 2 or more code patterns, it's likely code
+    return matchCount >= 2;
   }
 
   /**
