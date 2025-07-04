@@ -202,7 +202,7 @@ async function summarizeSelection() {
     let aiResponse;
     try {
       const result = await ai.models.generateContent({
-        model: 'gemini-1.5-pro',
+        model: 'gemini-1.5-flash',
         contents: prompt
       });
       aiResponse = result.text.trim();
@@ -224,7 +224,7 @@ async function summarizeSelection() {
       let aiResponse;
       try {
         const result = await ai.models.generateContent({
-          model: 'gemini-1.5-pro',
+          model: 'gemini-1.5-flash',
           contents: prompt
         });
         aiResponse = result.text.trim();
@@ -260,7 +260,7 @@ ipcMain.handle('overlay-followup', async (_, question) => {
   console.log('[Original context]:', originalSelectedText);
   try {
     const result = await ai.models.generateContent({
-      model: 'gemini-1.5-pro',
+      model: 'gemini-1.5-flash',
       contents: `Original text that was selected: "${originalSelectedText}"
 
 Follow-up question: ${question}`
@@ -368,7 +368,7 @@ async function processScreenshot(base64Image, bounds) {
   
   try {
     const result = await ai.models.generateContent({
-      model: 'gemini-1.5-pro',
+      model: 'gemini-1.5-flash',
       contents: [{
         parts: [
           { text: 'Analyze this screenshot and explain what you see. Be concise.' },
