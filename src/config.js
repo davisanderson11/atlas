@@ -1,4 +1,10 @@
 // Configuration file for Atlas
+import { settings } from './settings.js';
+
+// Check persisted settings first, then env variable, then default to false
+const rewindEnabled = settings.get('features.rewind.enabled') ?? 
+                     (process.env.ENABLE_REWIND === 'true') ?? 
+                     false;
 
 export const config = {
   // AI Model Configuration
@@ -12,7 +18,7 @@ export const config = {
   // Feature Flags
   features: {
     rewind: {
-      enabled: process.env.ENABLE_REWIND === 'true' || false, // Disabled by default
+      enabled: rewindEnabled,
       bufferDuration: 10, // seconds
       maxFrames: 30
     }

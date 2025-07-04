@@ -170,9 +170,23 @@
     
     .feature-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 20px;
       margin-bottom: 40px;
+    }
+    
+    /* Ensure 4 columns on wide screens */
+    @media (min-width: 900px) {
+      .feature-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+    
+    /* 2 columns on medium screens */
+    @media (max-width: 899px) and (min-width: 500px) {
+      .feature-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
     }
     
     .feature-card {
@@ -547,6 +561,14 @@
         <div class="feature-title">Rewind (Beta)</div>
         <div class="feature-desc">
           Review the last 10 seconds of screen activity with Ctrl+Shift+'
+        </div>
+      </div>
+      
+      <div class="feature-card">
+        <i class="mdi mdi-shield-check-outline feature-icon"></i>
+        <div class="feature-title">Privacy First</div>
+        <div class="feature-desc">
+          Local processing with no data sent to servers unless using AI features
         </div>
       </div>
     </div>

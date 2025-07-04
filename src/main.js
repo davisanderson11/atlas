@@ -16,6 +16,7 @@ import { homedir } from 'os';
 
 // Import config and handlers
 import { config } from './config.js';
+import { settings } from './settings.js';
 import { TextHandler } from './handlers/textHandler.js';
 import { ScreenshotHandler } from './handlers/screenshotHandler.js';
 import { MathHandler } from './handlers/mathHandler.js';
@@ -29,7 +30,15 @@ const __dirname = dirname(__filename);
 // Set custom cache directory to avoid Windows permission issues
 const userDataPath = join(homedir(), '.atlas');
 app.setPath('userData', userDataPath);
-app.setPath('cache', join(userDataPath, 'cache'));
+
+// Set cache path before app is ready to avoid permission issues
+try {
+  app.setPath('cache', join(userDataPath, 'cache'));
+  // Also set sessionData path to avoid disk cache errors
+  app.setPath('sessionData', join(userDataPath, 'session'));
+} catch (error) {
+  console.warn('[Cache setup warning]:', error.message);
+}
 
 console.log('[main.js] loading...');
 
@@ -420,6 +429,9 @@ ipcMain.handle('update-setting', async (event, setting, value) => {
   // Update config based on setting
   if (setting === 'rewind') {
     config.features.rewind.enabled = value;
+    
+    // Persist the setting
+    settings.set('features.rewind.enabled', value);
     
     // Handle rewind feature toggle
     if (value) {
