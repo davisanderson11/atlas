@@ -314,7 +314,6 @@
       <button id="close" title="Close">×</button>
     </div>
     <div id="content">Loading…</div>
-    <canvas id="math-graph" style="display: none; width: 100%; max-height: 250px; margin: 12px 0; border-radius: 8px; background: rgba(0,0,0,0.3);"></canvas>
     <div id="viz-container">
       <div class="viz-header">
         <span class="viz-type">Data Visualization</span>
@@ -444,22 +443,9 @@
     window.overlayAPI.onText((text) => {
       console.log('[Received text]:', text);
       updateContent(text);
-      // Hide math graph for regular text
-      document.getElementById('math-graph').style.display = 'none';
     });
     
-    // Handle math solutions with graphs
-    window.overlayAPI.onMath((data) => {
-      console.log('[Received math solution]:', data);
-      updateContent(data.text);
-      
-      // If there's a function to graph, draw it
-      if (data.graphFunction) {
-        const mathGraph = document.getElementById('math-graph');
-        mathGraph.style.display = 'block';
-        drawFunction(data.graphFunction);
-      }
-    });
+    // Remove the old math handler since we're using the data visualization system now
     
     // Toggle expansion function
     function toggleExpansion() {
@@ -539,15 +525,64 @@
           titleEl.innerHTML = '<i class="mdi mdi-table"></i>TSV Data';
           vizTypeEl.textContent = 'TSV Visualization';
           break;
+        case 'math':
+          titleEl.innerHTML = '<i class="mdi mdi-function"></i>Math Solution';
+          vizTypeEl.textContent = 'Mathematical Analysis';
+          break;
       }
       
-      // Default to chart view for tabular data, raw view for JSON
-      if (data.dataType === 'json') {
-        showRaw();
+      // Update button labels based on data type
+      const vizButtons = document.querySelectorAll('.viz-btn');
+      if (data.dataType === 'math') {
+        vizButtons[0].textContent = 'Solution';
+        vizButtons[0].onclick = showSolution;
+        vizButtons[1].textContent = 'Graph';
+        vizButtons[1].onclick = showChart;
+        vizButtons[2].textContent = 'Original';
+        showSolution(); // Default to solution view
       } else {
-        showChart();
+        vizButtons[0].textContent = 'Chart';
+        vizButtons[0].onclick = showChart;
+        vizButtons[1].textContent = 'Table';
+        vizButtons[1].onclick = showTable;
+        vizButtons[2].textContent = 'Raw';
+        
+        // Default views
+        if (data.dataType === 'json') {
+          showRaw();
+        } else {
+          showChart();
+        }
       }
     });
+    
+    // Show math solution
+    window.showSolution = function() {
+      currentView = 'solution';
+      updateViewButtons();
+      
+      chartCanvas.style.display = 'none';
+      tableContainer.style.display = 'block';
+      rawContainer.style.display = 'none';
+      
+      if (currentData && currentData.dataType === 'math') {
+        // Display the solution with LaTeX rendering
+        const solutionHtml = parseMarkdown(currentData.data.solution);
+        tableContainer.innerHTML = `<div style="padding: 20px; color: #e0e0e0; line-height: 1.8;">${solutionHtml}</div>`;
+        
+        // Render LaTeX
+        renderMathInElement(tableContainer, {
+          delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false},
+            {left: '\\(', right: '\\)', display: false},
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\boxed{', right: '}', display: false}
+          ],
+          throwOnError: false
+        });
+      }
+    }
     
     // Visualization view switching functions - make them global
     window.showChart = function() {
@@ -558,7 +593,10 @@
       tableContainer.style.display = 'none';
       rawContainer.style.display = 'none';
       
-      if (currentData && currentData.data && currentData.data.headers) {
+      if (currentData && currentData.dataType === 'math' && currentData.data.function) {
+        // For math, draw the function graph
+        drawFunction(currentData.data.function);
+      } else if (currentData && currentData.data && currentData.data.headers) {
         renderChart(currentData.data);
       }
     }
@@ -585,7 +623,11 @@
       rawContainer.style.display = 'block';
       
       if (currentData) {
-        renderRaw(currentData.originalText);
+        if (currentData.dataType === 'math') {
+          renderRaw(currentData.data.original || currentData.originalText);
+        } else {
+          renderRaw(currentData.originalText);
+        }
       }
     }
     
@@ -715,12 +757,23 @@
     
     // Function to draw mathematical functions
     function drawFunction(functionStr) {
-      const canvas = document.getElementById('math-graph');
-      const ctx = canvas.getContext('2d');
+      if (!functionStr) {
+        console.error('No function string provided');
+        return;
+      }
+      
+      // Use the chart canvas for drawing
+      const ctx = chartCanvas.getContext('2d');
+      
+      // Clear any existing chart
+      if (currentChart) {
+        currentChart.destroy();
+        currentChart = null;
+      }
       
       // Set canvas size
-      canvas.width = canvas.offsetWidth;
-      canvas.height = 250;
+      chartCanvas.width = chartCanvas.offsetWidth;
+      chartCanvas.height = 300;
       
       try {
         // Create the function from string
@@ -728,8 +781,8 @@
         
         // Set up coordinate system
         const padding = 20;
-        const width = canvas.width - 2 * padding;
-        const height = canvas.height - 2 * padding;
+        const width = chartCanvas.width - 2 * padding;
+        const height = chartCanvas.height - 2 * padding;
         
         // Define the viewing window
         const xMin = -10;
@@ -756,7 +809,7 @@
         const yRange = yMax - yMin;
         
         // Clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
         
         // Draw axes
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
@@ -860,7 +913,7 @@
         ctx.fillStyle = '#ff6b6b';
         ctx.font = '14px Inter, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Error graphing function', canvas.width / 2, canvas.height / 2);
+        ctx.fillText('Error graphing function', chartCanvas.width / 2, chartCanvas.height / 2);
       }
     }
     

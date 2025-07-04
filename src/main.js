@@ -99,9 +99,11 @@ function isMathEquation(text) {
     /^[\d\s\+\-\*\/\^\(\)\.]+$/, // Just an expression to evaluate
     /^[\d\s\+\-\*\/\^\(\)\.x]+\s*=\s*[\d\s\+\-\*\/\^\(\)\.x]+$/, // Equation with variable
     /\b(sin|cos|tan|log|ln|sqrt|exp)\b/i, // Trig/log functions
-    /\b\d+x\b|\bx\d+\b/, // Algebraic terms
+    /\b[a-zA-Z]\s*\(\s*x\s*\)\s*=/, // Function notation f(x) = ...
+    /\by\s*=\s*[^=]+/, // y = ... equations
+    /x\^\d+|\d+x/, // Polynomial terms
     /\^[\d\(\)]+/, // Exponents
-    /\b(solve|find|calculate)\b.*\bfor\b/i, // Word problems
+    /\b(solve|find|calculate)\b.*\b(for|equation)\b/i, // Word problems
   ];
   
   // Check if it matches any math pattern
@@ -109,10 +111,14 @@ function isMathEquation(text) {
   
   // Additional checks
   const hasNumbers = /\d/.test(trimmed);
+  const hasVariables = /\b[xyzabc]\b/.test(trimmed);
   const hasOperators = /[\+\-\*\/\^=]/.test(trimmed);
   const notTooLong = trimmed.length < 200; // Math expressions are usually concise
   
-  return isMath || (hasNumbers && hasOperators && notTooLong);
+  // Check for function-like patterns even without explicit patterns
+  const looksLikeFunction = hasVariables && (hasOperators || /\(.*\)/.test(trimmed));
+  
+  return isMath || (notTooLong && ((hasNumbers && hasOperators) || looksLikeFunction));
 }
 
 /**
@@ -125,6 +131,7 @@ function parseMathEquation(text) {
   let type = 'expression';
   let equation = trimmed;
   let variable = null;
+  let graphableFunction = null;
   
   if (trimmed.includes('=')) {
     type = 'equation';
@@ -134,19 +141,124 @@ function parseMathEquation(text) {
       // Find the variable (usually x, y, or z)
       const varMatch = trimmed.match(/[xyz]/i);
       variable = varMatch ? varMatch[0].toLowerCase() : 'x';
+      
+      // Try to extract a graphable function
+      graphableFunction = extractGraphableFunction(trimmed);
     }
   }
   
-  // For now, we'll pass the equation to the AI for solving
-  // In a real implementation, we could use math.js or similar
   return {
     original: trimmed,
     type: type,
     variable: variable,
     equation: equation,
-    // We'll let the AI handle the actual solving
+    graphableFunction: graphableFunction,
     needsAISolving: true
   };
+}
+
+/**
+ * Extract a graphable function from an equation
+ */
+function extractGraphableFunction(equation) {
+  // Clean the equation first
+  const cleaned = equation.trim();
+  
+  // Try to parse equations like "y = x^2 + 2x - 3"
+  const yEqualsMatch = cleaned.match(/y\s*=\s*(.+)/i);
+  if (yEqualsMatch) {
+    return convertToJSFunction(yEqualsMatch[1].trim());
+  }
+  
+  // Try to parse functions like "f(x) = x^2 + 2x - 3" or "g(x) = ..."
+  const fxMatch = cleaned.match(/[a-zA-Z]\s*\(\s*x\s*\)\s*=\s*(.+)/i);
+  if (fxMatch) {
+    return convertToJSFunction(fxMatch[1].trim());
+  }
+  
+  // Try to parse implicit functions like "x^2 + 2x - 3" or "sin(x)"
+  if (cleaned.includes('x') && !cleaned.includes('=')) {
+    // Make sure it's not a solve-for-x type problem
+    if (!cleaned.match(/\b(solve|find|calculate)\b/i)) {
+      return convertToJSFunction(cleaned);
+    }
+  }
+  
+  // Try to extract from common patterns like "The function f(x) = x^2"
+  const functionMatch = cleaned.match(/function[^=]*=\s*(.+)/i);
+  if (functionMatch) {
+    const func = functionMatch[1].trim();
+    if (func.includes('x')) {
+      return convertToJSFunction(func);
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Convert math notation to JavaScript function
+ */
+function convertToJSFunction(expr) {
+  try {
+    // Clean up the expression
+    let jsExpr = expr
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    // Handle implicit multiplication more carefully
+    // Replace x^n with x**n
+    jsExpr = jsExpr.replace(/\^/g, '**');
+    
+    // Handle coefficients before variables (2x -> 2*x)
+    jsExpr = jsExpr.replace(/(\d+)([a-zA-Z])/g, '$1*$2');
+    
+    // Replace math functions FIRST - before handling implicit multiplication
+    jsExpr = jsExpr.replace(/\bsin\b/g, 'Math.sin');
+    jsExpr = jsExpr.replace(/\bcos\b/g, 'Math.cos');
+    jsExpr = jsExpr.replace(/\btan\b/g, 'Math.tan');
+    jsExpr = jsExpr.replace(/\bln\b/g, 'Math.log');
+    jsExpr = jsExpr.replace(/\blog\b/g, 'Math.log10');
+    jsExpr = jsExpr.replace(/\bsqrt\b/g, 'Math.sqrt');
+    jsExpr = jsExpr.replace(/\babs\b/g, 'Math.abs');
+    jsExpr = jsExpr.replace(/\bpi\b/gi, 'Math.PI');
+    jsExpr = jsExpr.replace(/\be\b/g, 'Math.E');
+    
+    // Now handle implicit multiplication
+    // Handle variables before parentheses (x(2) -> x*(2)) but NOT for Math functions
+    // First protect Math functions
+    jsExpr = jsExpr.replace(/Math\.(sin|cos|tan|log|log10|sqrt|abs)\(/g, '__MATH_$1__(');
+    
+    // Now do the variable multiplication
+    jsExpr = jsExpr.replace(/([a-zA-Z])\s*\(/g, '$1*(');
+    
+    // Restore Math functions
+    jsExpr = jsExpr.replace(/__MATH_(\w+)__\(/g, 'Math.$1(');
+    
+    // Handle numbers before parentheses (2(x) -> 2*(x))
+    jsExpr = jsExpr.replace(/(\d+)\s*\(/g, '$1*(');
+    
+    // Handle parentheses multiplication )(  -> )*(
+    jsExpr = jsExpr.replace(/\)\s*\(/g, ')*(');
+    
+    // Handle parentheses before variables )x -> )*x
+    jsExpr = jsExpr.replace(/\)\s*([a-zA-Z])/g, ')*$1');
+    
+    // Handle parentheses before numbers )2 -> )*2
+    jsExpr = jsExpr.replace(/\)\s*(\d)/g, ')*$1');
+    
+    // Test if it's a valid function
+    const testFunc = new Function('x', `return ${jsExpr}`);
+    // Test with a few values to ensure it works
+    testFunc(0);
+    testFunc(1);
+    testFunc(-1);
+    
+    return jsExpr;
+  } catch (e) {
+    console.error('Failed to convert expression:', e);
+    return null;
+  }
 }
 
 /**
@@ -326,8 +438,6 @@ function createOverlay(content) {
       if (overlayWindow && !overlayWindow.isDestroyed()) {
         if (typeof content === 'string') {
           overlayWindow.webContents.send('overlay-text', content);
-        } else if (content.type === 'math-solution') {
-          overlayWindow.webContents.send('overlay-math', content);
         } else {
           overlayWindow.webContents.send('overlay-data', content);
         }
@@ -406,6 +516,7 @@ async function summarizeSelection() {
       
       // Handle math equations differently - send to AI for step-by-step solving
       if (structuredData.type === 'math') {
+        const mathData = structuredData.data;
         const mathPrompt = `Solve this math problem step-by-step. Show your work clearly:
 
 ${selectedText}
@@ -415,12 +526,11 @@ Please:
 2. Show each step of the solution
 3. Explain what you're doing in each step
 4. Give the final answer clearly
-5. If it's a function of x, describe its properties (domain, range, etc.)
+5. If it's a function of x, describe its properties (domain, range, intercepts, etc.)
 6. Use LaTeX notation for mathematical expressions (e.g., $x^2$, $\\frac{a}{b}$, $\\boxed{answer}$)
 7. Use bullet points where appropriate
 
-IMPORTANT: If this is a function that can be graphed (like y = f(x)), at the very end of your response, add this exact line:
-GRAPH_FUNCTION: [the function in JavaScript syntax, e.g., "x => x*x + 2*x - 3"]`;
+Do NOT include any special formatting like "GRAPH_FUNCTION:" - just solve and explain the problem.`;
 
         console.log('[Sending math to AI for solving]');
         
@@ -433,18 +543,18 @@ GRAPH_FUNCTION: [the function in JavaScript syntax, e.g., "x => x*x + 2*x - 3"]`
           aiResponse = result.text.trim();
           console.log('[AI solved math problem]');
           
-          // Check if the response contains a graphable function
-          const graphMatch = aiResponse.match(/GRAPH_FUNCTION:\s*\[(.*?)\]/);
-          if (graphMatch) {
-            const functionStr = graphMatch[1];
-            // Remove the graph instruction from the display text
-            aiResponse = aiResponse.replace(/GRAPH_FUNCTION:.*$/, '').trim();
-            
-            // Send both the text and the function to graph
+          // If we have a graphable function, use visualization
+          if (mathData.graphableFunction) {
+            console.log('[Graphable function detected]:', mathData.graphableFunction);
             createOverlay({
-              type: 'math-solution',
-              text: aiResponse,
-              graphFunction: functionStr
+              type: 'visualization',
+              dataType: 'math',
+              data: {
+                solution: aiResponse,
+                function: mathData.graphableFunction,
+                original: selectedText
+              },
+              originalText: selectedText
             });
             return;
           }
