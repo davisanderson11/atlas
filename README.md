@@ -39,10 +39,14 @@ After any AI response, you can:
 
 ### Temporal Bookmarks (Beta)
 - **Create Bookmark**: `Ctrl + Shift + /` (Windows/Linux) or `Cmd + Shift + /` (Mac)
-  - Captures current screen, clipboard contents, and AI-generated context
-  - Creates a searchable snapshot of your current work state
+  - Captures ALL open windows with individual screenshots
+  - Saves clipboard contents and full workspace context
+  - AI analyzes your entire workflow across applications
+  - Creates a comprehensive snapshot of your digital workspace
 - **Browse Bookmarks**: `Ctrl + Shift + ;` (Windows/Linux) or `Cmd + Shift + ;` (Mac)
-  - View all saved bookmarks with search functionality
+  - Explore all windows that were open at the time of capture
+  - Navigate between window screenshots with a tabbed interface
+  - Search through window titles, app names, and AI context
   - Add notes and organize your captured moments
 
 ## Specialized Modes

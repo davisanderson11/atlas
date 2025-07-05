@@ -38,21 +38,23 @@ export class BookmarkHandler {
       const timestamp = Date.now();
       const bookmarkId = `bookmark_${timestamp}`;
       
-      // Capture current state
-      const screenshot = await this.captureFullScreen();
+      // Capture all windows and primary screen
+      const windows = await this.captureAllWindows();
+      const primaryScreenshot = await this.captureFullScreen();
       const clipboardText = clipboard.readText();
       const clipboardImage = clipboard.readImage();
       
-      // Get window title and active app info
-      const activeWindow = this.getActiveWindowInfo();
+      // Get active window ID
+      const activeWindowId = this.getActiveWindowId(windows);
       
       // Generate AI context for the moment
       const aiContext = await this.generateContextSummary({
         timestamp,
         clipboardText,
         hasClipboardImage: !clipboardImage.isEmpty(),
-        activeWindow,
-        screenshot
+        windows,
+        activeWindowId,
+        primaryScreenshot
       });
       
       // Create bookmark object
@@ -60,13 +62,14 @@ export class BookmarkHandler {
         id: bookmarkId,
         timestamp,
         createdAt: new Date(timestamp).toISOString(),
-        activeWindow,
+        windows,
+        activeWindowId,
+        primaryScreenshot,
         clipboard: {
           text: clipboardText,
           hasImage: !clipboardImage.isEmpty(),
           imageData: clipboardImage.isEmpty() ? null : clipboardImage.toPNG().toString('base64')
         },
-        screenshot,
         aiContext,
         userNote: '', // Can be added later
         tags: []
@@ -112,44 +115,125 @@ export class BookmarkHandler {
   }
 
   /**
-   * Get active window information
+   * Capture all open windows
    */
-  getActiveWindowInfo() {
-    // This is a simplified version - in production you might use native modules
-    // to get more detailed window information
-    return {
-      title: 'Atlas Bookmark',
-      app: 'Unknown',
-      timestamp: Date.now()
-    };
+  async captureAllWindows() {
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ['window'],
+        thumbnailSize: {
+          width: 1920,
+          height: 1080
+        },
+        fetchWindowIcons: true
+      });
+      
+      console.log(`[BookmarkHandler] Found ${sources.length} windows`);
+      
+      const windows = await Promise.all(sources.map(async (source, index) => {
+        try {
+          // Get window bounds if available (may require native module)
+          const bounds = await this.getWindowBounds(source.id);
+          
+          return {
+            id: source.id,
+            title: source.name,
+            app: source.appIcon ? this.extractAppName(source.name) : 'Unknown',
+            screenshot: source.thumbnail.toPNG().toString('base64'),
+            appIcon: source.appIcon ? source.appIcon.toPNG().toString('base64') : null,
+            bounds: bounds || { x: 0, y: 0, width: 800, height: 600 },
+            zOrder: index, // Approximation of z-order
+            display_id: source.display_id
+          };
+        } catch (error) {
+          console.error(`[BookmarkHandler] Failed to process window ${source.name}:`, error);
+          return null;
+        }
+      }));
+      
+      // Filter out failed captures
+      return windows.filter(w => w !== null);
+    } catch (error) {
+      console.error('[BookmarkHandler] Failed to capture windows:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get window bounds (placeholder - would need native module for full implementation)
+   */
+  async getWindowBounds(windowId) {
+    // In a full implementation, this would use a native module like node-window-manager
+    // For now, return null to use default bounds
+    return null;
+  }
+
+  /**
+   * Extract app name from window title
+   */
+  extractAppName(windowTitle) {
+    // Common patterns for extracting app names
+    const patterns = [
+      /^(.+?) - /,           // "App - Document"
+      / - (.+?)$/,           // "Document - App"
+      /^(.+?): /,            // "App: Document"
+      / \| (.+?)$/,          // "Document | App"
+      / — (.+?)$/,           // "Document — App"
+    ];
+    
+    for (const pattern of patterns) {
+      const match = windowTitle.match(pattern);
+      if (match) {
+        return match[1].trim();
+      }
+    }
+    
+    // If no pattern matches, return the first word or the whole title
+    const firstWord = windowTitle.split(' ')[0];
+    return firstWord.length > 2 ? firstWord : windowTitle;
+  }
+
+  /**
+   * Get the ID of the currently active window
+   */
+  getActiveWindowId(windows) {
+    // In a full implementation, this would use native module to get actual active window
+    // For now, return the first window (usually most recently used)
+    return windows.length > 0 ? windows[0].id : null;
   }
 
   /**
    * Generate AI context summary for the bookmark
    */
-  async generateContextSummary({ timestamp, clipboardText, hasClipboardImage, activeWindow, screenshot }) {
+  async generateContextSummary({ timestamp, clipboardText, hasClipboardImage, windows, activeWindowId, primaryScreenshot }) {
     try {
-      const prompt = `Analyze this moment in time and provide a brief contextual summary:
+      const activeWindow = windows.find(w => w.id === activeWindowId);
+      const windowList = windows.map(w => `- ${w.title} (${w.app})`).join('\n');
+      
+      const prompt = `Analyze this moment in time and provide a comprehensive contextual summary:
 
 Time: ${new Date(timestamp).toLocaleString()}
+Open windows (${windows.length} total):
+${windowList}
+
+Active window: ${activeWindow ? activeWindow.title : 'Unknown'}
 Clipboard content: ${clipboardText ? `"${clipboardText.substring(0, 100)}${clipboardText.length > 100 ? '...' : ''}"` : 'Empty'}
 Clipboard has image: ${hasClipboardImage ? 'Yes' : 'No'}
-Active window: ${activeWindow.title}
 
-Based on the screenshot and available information, describe:
-1. What the user appears to be working on
-2. The context of this moment
-3. Any notable elements visible
+Based on the primary screenshot and the context of all open windows, describe:
+1. What the user appears to be working on overall
+2. The workflow context across multiple applications
+3. Key tasks or projects visible across windows
 
-Keep the summary concise (2-3 sentences max).`;
+Keep the summary concise (3-4 sentences max) but comprehensive.`;
 
       const parts = [{ text: prompt }];
       
-      if (screenshot) {
+      if (primaryScreenshot) {
         parts.push({
           inlineData: {
             mimeType: 'image/png',
-            data: screenshot
+            data: primaryScreenshot
           }
         });
       }
@@ -285,8 +369,16 @@ Keep the summary concise (2-3 sentences max).`;
       if (bookmark.tags && bookmark.tags.some(tag => tag.toLowerCase().includes(searchTerm))) {
         return true;
       }
-      // Search in window title
-      if (bookmark.activeWindow.title && bookmark.activeWindow.title.toLowerCase().includes(searchTerm)) {
+      // Search in window titles
+      if (bookmark.windows && bookmark.windows.some(window => 
+        window.title && window.title.toLowerCase().includes(searchTerm)
+      )) {
+        return true;
+      }
+      // Search in app names
+      if (bookmark.windows && bookmark.windows.some(window => 
+        window.app && window.app.toLowerCase().includes(searchTerm)
+      )) {
         return true;
       }
       
