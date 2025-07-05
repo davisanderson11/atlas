@@ -172,6 +172,16 @@ export class ActionSuggestionsHandler {
    * Detect the type of content in clipboard
    */
   detectContentType(content) {
+    // Math detection - check for equations first
+    if (this.isMathEquation(content)) {
+      return 'math';
+    }
+    
+    // CSV detection
+    if (this.isCSV(content)) {
+      return 'csv';
+    }
+    
     // URL detection - more comprehensive pattern
     const urlPattern = /^(https?:\/\/)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&\/\/=]*)$/i;
     if (urlPattern.test(content.trim())) {
@@ -234,6 +244,24 @@ export class ActionSuggestionsHandler {
     const actions = [];
     
     switch (type) {
+      case 'math':
+        actions.push(
+          { id: 'solve', label: 'Solve step-by-step' },
+          { id: 'graph', label: 'Graph function' },
+          { id: 'simplify', label: 'Simplify expression' },
+          { id: 'calculate', label: 'Calculate result' }
+        );
+        break;
+        
+      case 'csv':
+        actions.push(
+          { id: 'visualize', label: 'Create chart' },
+          { id: 'analyze', label: 'Analyze data' },
+          { id: 'table', label: 'Format as table' },
+          { id: 'stats', label: 'Show statistics' }
+        );
+        break;
+        
       case 'url':
         actions.push(
           { id: 'preview', label: 'Preview page' },
@@ -249,9 +277,7 @@ export class ActionSuggestionsHandler {
         );
         
         // Detect language for translation suggestions
-        if (this.detectLanguage(content) === 'javascript') {
-          actions.push({ id: 'to-python', label: 'Convert to Python' });
-        } else if (this.detectLanguage(content) === 'python') {
+        if (this.detectLanguage(content) === 'python') {
           actions.push({ id: 'to-javascript', label: 'Convert to JavaScript' });
         }
         break;
@@ -296,6 +322,46 @@ export class ActionSuggestionsHandler {
       return 'python';
     }
     return 'unknown';
+  }
+  
+  /**
+   * Check if content is a math equation
+   */
+  isMathEquation(content) {
+    // Basic math patterns
+    const mathPatterns = [
+      /^[\d\s+\-*/^()=<>≤≥±∓×÷√∛∜∑∏∫∬∭∮∯∰∇∂∞]+$/,  // Basic math symbols
+      /\d+\s*[+\-*/^]\s*\d+/,  // Simple operations
+      /[a-zA-Z]\s*=\s*[\d+\-*/^()]+/,  // Equations like x = 2 + 3
+      /\b(sin|cos|tan|log|ln|sqrt|exp|abs)\b/i,  // Math functions
+      /\b(solve|integral|derivative|limit)\b/i,  // Calculus keywords
+      /\^2|\^3|\^\d+/,  // Powers
+      /\d+[a-zA-Z]\s*[+\-*/]\s*\d+[a-zA-Z]?/,  // Algebraic expressions
+      /\\frac|\\int|\\sum|\\sqrt/,  // LaTeX
+    ];
+    
+    return mathPatterns.some(pattern => pattern.test(content));
+  }
+  
+  /**
+   * Check if content is CSV data
+   */
+  isCSV(content) {
+    const lines = content.trim().split('\n');
+    if (lines.length < 2) return false;
+    
+    // Check if lines have consistent comma counts
+    const firstLineCommas = (lines[0].match(/,/g) || []).length;
+    if (firstLineCommas === 0) return false;
+    
+    // Check if at least half the lines have the same number of commas
+    let consistentLines = 0;
+    for (const line of lines.slice(0, Math.min(5, lines.length))) {
+      const commaCount = (line.match(/,/g) || []).length;
+      if (commaCount === firstLineCommas) consistentLines++;
+    }
+    
+    return consistentLines >= Math.min(3, lines.length * 0.5);
   }
 
   /**
@@ -548,11 +614,6 @@ export class ActionSuggestionsHandler {
         this.triggerAtlasAction('add-comments', content);
         break;
         
-      case 'to-python':
-        // Trigger Atlas with translation request
-        this.triggerAtlasAction('to-python', content);
-        break;
-        
       case 'to-javascript':
         // Trigger Atlas with translation request
         this.triggerAtlasAction('to-javascript', content);
@@ -581,6 +642,40 @@ export class ActionSuggestionsHandler {
       case 'improve':
         // Trigger Atlas with writing improvement request
         this.triggerAtlasAction('improve', content);
+        break;
+        
+      // Math actions
+      case 'solve':
+        this.triggerAtlasAction('math-solve', content);
+        break;
+        
+      case 'graph':
+        this.triggerAtlasAction('math-graph', content);
+        break;
+        
+      case 'simplify':
+        this.triggerAtlasAction('math-simplify', content);
+        break;
+        
+      case 'calculate':
+        this.triggerAtlasAction('math-calculate', content);
+        break;
+        
+      // Data/CSV actions
+      case 'visualize':
+        this.triggerAtlasAction('data-visualize', content);
+        break;
+        
+      case 'analyze':
+        this.triggerAtlasAction('data-analyze', content);
+        break;
+        
+      case 'table':
+        this.triggerAtlasAction('data-table', content);
+        break;
+        
+      case 'stats':
+        this.triggerAtlasAction('data-stats', content);
         break;
         
       default:

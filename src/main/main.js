@@ -861,14 +861,6 @@ app.whenReady().then(() => {
           result = commentResult.text.trim();
           break;
           
-        case 'to-python':
-          const toPythonResult = await ai.models.generateContent({
-            model: config.ai.model,
-            contents: `Convert this JavaScript code to Python:\n\n${content}`
-          });
-          result = toPythonResult.text.trim();
-          break;
-          
         case 'to-javascript':
           const toJsResult = await ai.models.generateContent({
             model: config.ai.model,
@@ -911,6 +903,113 @@ app.whenReady().then(() => {
             contents: `Provide specific suggestions to improve this writing. List each suggestion as a bullet point with the issue and how to fix it:\n\n${content}`
           });
           result = improveResult.text.trim();
+          break;
+          
+        // Math actions
+        case 'math-solve':
+          // Process through math handler for step-by-step solution
+          const mathResult = await mathHandler.process(content);
+          if (mathResult.graphableFunction) {
+            // Show with visualization
+            createOverlay({
+              type: 'visualization',
+              dataType: 'math',
+              data: {
+                solution: mathResult.solution,
+                function: mathResult.graphableFunction,
+                original: content
+              },
+              originalText: content
+            });
+            // Close status window
+            if (statusWindow && !statusWindow.isDestroyed()) {
+              statusWindow.close();
+              statusWindow = null;
+            }
+            return; // Exit early since we're using createOverlay directly
+          } else {
+            result = mathResult.solution;
+          }
+          break;
+          
+        case 'math-graph':
+          // Focus on graphing if possible
+          const graphResult = await mathHandler.process(content);
+          if (graphResult.graphableFunction) {
+            createOverlay({
+              type: 'visualization',
+              dataType: 'math',
+              data: {
+                solution: `Graph of: ${content}`,
+                function: graphResult.graphableFunction,
+                original: content
+              },
+              originalText: content
+            });
+            if (statusWindow && !statusWindow.isDestroyed()) {
+              statusWindow.close();
+              statusWindow = null;
+            }
+            return;
+          } else {
+            result = 'Unable to graph this expression. Please provide a function like y = x^2 or f(x) = sin(x)';
+          }
+          break;
+          
+        case 'math-simplify':
+          const simplifyResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Simplify this mathematical expression and show the steps:\n\n${content}`
+          });
+          result = simplifyResult.text.trim();
+          break;
+          
+        case 'math-calculate':
+          const calcResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Calculate the numerical result of this expression:\n\n${content}`
+          });
+          result = calcResult.text.trim();
+          break;
+          
+        // Data/CSV actions
+        case 'data-visualize':
+          // Process through data handler for visualization
+          const dataResult = await dataHandler.process(content);
+          if (dataResult && dataResult.type === 'visualization') {
+            createOverlay(dataResult);
+            if (statusWindow && !statusWindow.isDestroyed()) {
+              statusWindow.close();
+              statusWindow = null;
+            }
+            return;
+          } else {
+            result = 'Unable to visualize this data. Please ensure it\'s properly formatted CSV or JSON.';
+          }
+          break;
+          
+        case 'data-analyze':
+          const analyzeResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Analyze this data and provide insights, patterns, and key findings:\n\n${content}`
+          });
+          result = analyzeResult.text.trim();
+          break;
+          
+        case 'data-table':
+          const tableResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Format this data as a clean, readable table:\n\n${content}`
+          });
+          result = tableResult.text.trim();
+          break;
+          
+        case 'data-stats':
+          const statsResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Calculate statistical measures for this data (mean, median, mode, std dev, etc.):\n\n${content}`
+          });
+          result = statsResult.text.trim();
           break;
           
         default:
