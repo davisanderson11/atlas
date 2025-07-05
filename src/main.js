@@ -814,6 +814,126 @@ app.whenReady().then(() => {
     createOverlay(content);
   });
   
+  // Listen for specific action chip actions
+  process.on('action-chip-action', async (data) => {
+    console.log('[Main] Action chip action triggered:', data.type);
+    const { type, content } = data;
+    
+    // Store original content
+    originalSelectedText = content;
+    
+    // Show processing status
+    createStatus('Processing...', 'info', 30000);
+    
+    try {
+      let result;
+      
+      switch (type) {
+        case 'summarize':
+          const summarizeResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Summarize this text concisely:\n\n${content}`
+          });
+          result = summarizeResult.text.trim();
+          break;
+          
+        case 'explain':
+          const explainResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Explain this code:\n\n${content}`
+          });
+          result = explainResult.text.trim();
+          break;
+          
+        case 'optimize':
+          const optimizeResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Optimize this code for performance:\n\n${content}`
+          });
+          result = optimizeResult.text.trim();
+          break;
+          
+        case 'add-comments':
+          const commentResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Add helpful comments to this code:\n\n${content}`
+          });
+          result = commentResult.text.trim();
+          break;
+          
+        case 'to-python':
+          const toPythonResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Convert this JavaScript code to Python:\n\n${content}`
+          });
+          result = toPythonResult.text.trim();
+          break;
+          
+        case 'to-javascript':
+          const toJsResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Convert this Python code to JavaScript:\n\n${content}`
+          });
+          result = toJsResult.text.trim();
+          break;
+          
+        case 'format-json':
+          const formatResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Format this JSON properly:\n\n${content}`
+          });
+          result = formatResult.text.trim();
+          break;
+          
+        case 'translate':
+          // This case shouldn't be reached anymore as translate shows language selector
+          result = 'Please select a language from the dropdown.';
+          break;
+          
+        case 'translate-to':
+          // Handle translation with specific language
+          const targetLang = data.language ? data.language.name : 'Spanish';
+          const translateToResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Translate this text to ${targetLang}:\n\n${content}`
+          });
+          result = translateToResult.text.trim();
+          break;
+          
+        case 'improve':
+          const improveResult = await ai.models.generateContent({
+            model: config.ai.model,
+            contents: `Provide specific suggestions to improve this writing. List each suggestion as a bullet point with the issue and how to fix it:\n\n${content}`
+          });
+          result = improveResult.text.trim();
+          break;
+          
+        default:
+          result = 'Unknown action';
+      }
+      
+      // Close status window
+      if (statusWindow && !statusWindow.isDestroyed()) {
+        statusWindow.close();
+        statusWindow = null;
+      }
+      
+      // Show result
+      createOverlay(result);
+      
+    } catch (error) {
+      console.error('[Action chip action error]:', error);
+      
+      // Close status window if open
+      if (statusWindow && !statusWindow.isDestroyed()) {
+        statusWindow.close();
+        statusWindow = null;
+      }
+      
+      createOverlay(`Error: ${error.message}`);
+    }
+  });
+  
   // Monitor active window for privacy (only if rewind is enabled)
   if (config.features.rewind.enabled) {
     privacyMonitorInterval = setInterval(() => {

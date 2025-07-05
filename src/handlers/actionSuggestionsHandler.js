@@ -223,8 +223,7 @@ export class ActionSuggestionsHandler {
       case 'url':
         actions.push(
           { id: 'preview', label: 'Preview page' },
-          { id: 'summarize', label: 'Summarize article' },
-          { id: 'extract-images', label: 'Extract images' }
+          { id: 'summarize', label: 'Summarize article' }
         );
         break;
         
@@ -503,61 +502,61 @@ export class ActionSuggestionsHandler {
     // Implement specific handlers for each action type
     switch (actionId) {
       case 'preview':
-        // Open URL in default browser
+        // Create preview window in Atlas
         if (content.trim().match(/^(https?:\/\/|www\.)/i)) {
           let url = content.trim();
           if (!url.startsWith('http')) {
             url = 'https://' + url;
           }
-          console.log('[ActionSuggestions] Opening URL:', url);
-          shell.openExternal(url);
+          console.log('[ActionSuggestions] Creating preview window for URL:', url);
+          this.createPreviewWindow(url);
         }
         break;
         
       case 'summarize':
       case 'summarize-text':
-        // Trigger the main Atlas summarize function
-        this.triggerAtlasSummarize(content);
+        // Trigger Atlas with summarize action
+        this.triggerAtlasAction('summarize', content);
         break;
         
       case 'explain':
         // Trigger Atlas with code explanation request
-        this.triggerAtlasAction('Explain this code:\n\n' + content);
+        this.triggerAtlasAction('explain', content);
         break;
         
       case 'optimize':
         // Trigger Atlas with optimization request
-        this.triggerAtlasAction('Optimize this code for performance:\n\n' + content);
+        this.triggerAtlasAction('optimize', content);
         break;
         
       case 'add-comments':
         // Trigger Atlas with comment request
-        this.triggerAtlasAction('Add helpful comments to this code:\n\n' + content);
+        this.triggerAtlasAction('add-comments', content);
         break;
         
       case 'to-python':
         // Trigger Atlas with translation request
-        this.triggerAtlasAction('Convert this JavaScript code to Python:\n\n' + content);
+        this.triggerAtlasAction('to-python', content);
         break;
         
       case 'to-javascript':
         // Trigger Atlas with translation request
-        this.triggerAtlasAction('Convert this Python code to JavaScript:\n\n' + content);
+        this.triggerAtlasAction('to-javascript', content);
         break;
         
       case 'format':
         // Trigger Atlas with format request
-        this.triggerAtlasAction('Format this JSON properly:\n\n' + content);
+        this.triggerAtlasAction('format-json', content);
         break;
         
       case 'translate':
-        // Trigger Atlas with translation request
-        this.triggerAtlasAction('Translate this text to English (or to Spanish if already in English):\n\n' + content);
+        // Show language selector
+        this.showLanguageSelector(content);
         break;
         
       case 'improve':
         // Trigger Atlas with writing improvement request
-        this.triggerAtlasAction('Improve this writing (grammar, clarity, conciseness):\n\n' + content);
+        this.triggerAtlasAction('improve', content);
         break;
         
       default:
@@ -566,17 +565,216 @@ export class ActionSuggestionsHandler {
   }
   
   /**
+   * Create preview window for URL
+   */
+  createPreviewWindow(url) {
+    console.log('[ActionSuggestions] Creating preview window for:', url);
+    
+    // Get screen dimensions
+    const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+    
+    // Calculate window size (80% of screen or max 1200x800)
+    const windowWidth = Math.min(Math.floor(screenWidth * 0.8), 1200);
+    const windowHeight = Math.min(Math.floor(screenHeight * 0.8), 800);
+    
+    // Center the window
+    const x = Math.floor((screenWidth - windowWidth) / 2);
+    const y = Math.floor((screenHeight - windowHeight) / 2);
+    
+    // Create preview window
+    const previewWindow = new BrowserWindow({
+      x, y,
+      width: windowWidth,
+      height: windowHeight,
+      title: `Preview: ${url}`,
+      webPreferences: {
+        webviewTag: true,
+        nodeIntegration: false,
+        contextIsolation: true
+      },
+      frame: true,
+      show: false
+    });
+    
+    // Create HTML content with webview
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: #1a1a1a;
+          }
+          
+          .toolbar {
+            height: 40px;
+            background: #2a2a2a;
+            border-bottom: 1px solid #444;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            flex-shrink: 0;
+          }
+          
+          .url-display {
+            flex: 1;
+            color: #e0e0e0;
+            font-size: 13px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            margin-right: 12px;
+          }
+          
+          .close-button {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #e0e0e0;
+            padding: 6px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s ease;
+          }
+          
+          .close-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+          }
+          
+          webview {
+            flex: 1;
+            width: 100%;
+            border: none;
+          }
+          
+          .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #888;
+            font-size: 16px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="toolbar">
+          <div class="url-display">${url}</div>
+          <button class="close-button" onclick="window.close()">Close</button>
+        </div>
+        <div class="loading">Loading...</div>
+        <webview src="${url}" style="display:none;"></webview>
+        
+        <script>
+          const webview = document.querySelector('webview');
+          const loading = document.querySelector('.loading');
+          
+          webview.addEventListener('dom-ready', () => {
+            loading.style.display = 'none';
+            webview.style.display = 'block';
+          });
+          
+          webview.addEventListener('did-fail-load', (e) => {
+            loading.textContent = 'Failed to load page: ' + e.errorDescription;
+          });
+        </script>
+      </body>
+      </html>
+    `;
+    
+    // Load the HTML content
+    previewWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    
+    // Show window when ready
+    previewWindow.once('ready-to-show', () => {
+      previewWindow.show();
+    });
+  }
+
+  /**
+   * Show language selector for translation
+   */
+  showLanguageSelector(content) {
+    console.log('[ActionSuggestions] Showing language selector');
+    
+    // Get the directory path
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    
+    // Get cursor position
+    const cursorPos = screen.getCursorScreenPoint();
+    
+    // Create language selector window
+    const languageSelectorWindow = new BrowserWindow({
+      x: cursorPos.x + 10,
+      y: cursorPos.y + 10,
+      width: 250,
+      height: 350,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      resizable: false,
+      movable: false,
+      focusable: true,
+      skipTaskbar: true,
+      hasShadow: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: join(__dirname, '../language-selector-preload.js')
+      }
+    });
+    
+    // Load the language selector HTML
+    languageSelectorWindow.loadFile(join(__dirname, '../language-selector.html'));
+    
+    // Handle language selection
+    const handleLanguageSelection = (event, language) => {
+      console.log('[ActionSuggestions] Language selected:', language.name);
+      languageSelectorWindow.close();
+      
+      // Trigger translation with selected language
+      process.emit('action-chip-action', { 
+        type: 'translate-to', 
+        content: content,
+        language: language
+      });
+      
+      // Remove the listener
+      ipcMain.removeListener('language-selected', handleLanguageSelection);
+    };
+    
+    // Remove any existing listeners first
+    ipcMain.removeAllListeners('language-selected');
+    
+    // Add the new listener
+    ipcMain.on('language-selected', handleLanguageSelection);
+    
+    // Clean up on close
+    languageSelectorWindow.on('closed', () => {
+      ipcMain.removeAllListeners('language-selected');
+    });
+    
+    // Show the window
+    languageSelectorWindow.show();
+  }
+
+  /**
    * Trigger Atlas summarize function
    */
   async triggerAtlasSummarize(content) {
     try {
       console.log('[ActionSuggestions] Triggering Atlas summarize with content:', content.substring(0, 50) + '...');
-      
-      // Make sure clipboard has the content
-      clipboard.writeText(content);
-      
-      // Wait a bit to ensure clipboard is set
-      await new Promise(resolve => setTimeout(resolve, 50));
       
       // Emit a custom event that main.js can listen for
       process.emit('action-chip-trigger', content);
@@ -589,12 +787,116 @@ export class ActionSuggestionsHandler {
   /**
    * Trigger Atlas with a specific action/prompt
    */
-  async triggerAtlasAction(prompt) {
+  async triggerAtlasAction(actionType, content) {
     try {
-      // Same as summarize but with the prompt
-      await this.triggerAtlasSummarize(prompt);
+      console.log('[ActionSuggestions] Triggering Atlas action:', actionType);
+      
+      // Emit a custom event with action type and content
+      process.emit('action-chip-action', { type: actionType, content: content });
+      
     } catch (error) {
       console.error('[ActionSuggestions] Error triggering action:', error);
+    }
+  }
+
+  /**
+   * Create a preview window for a URL
+   */
+  createPreviewWindow(url) {
+    try {
+      console.log('[ActionSuggestions] Creating preview window for URL:', url);
+      
+      // Get the directory path
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+      
+      // Get current display
+      const currentDisplay = screen.getPrimaryDisplay();
+      const { width, height } = currentDisplay.workAreaSize;
+      
+      // Create preview window
+      const previewWindow = new BrowserWindow({
+        width: Math.min(1200, width * 0.8),
+        height: Math.min(800, height * 0.8),
+        center: true,
+        frame: true,
+        titleBarStyle: 'default',
+        title: `Atlas Preview - ${url}`,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          webviewTag: true
+        }
+      });
+      
+      // Load preview HTML with the URL
+      const previewHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Atlas Preview</title>
+          <style>
+            body {
+              margin: 0;
+              padding: 0;
+              height: 100vh;
+              display: flex;
+              flex-direction: column;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            }
+            .toolbar {
+              background: #f5f5f5;
+              border-bottom: 1px solid #ccc;
+              padding: 8px 12px;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            }
+            .url-bar {
+              flex: 1;
+              padding: 6px 12px;
+              border: 1px solid #ccc;
+              border-radius: 4px;
+              font-size: 14px;
+              background: white;
+            }
+            .close-button {
+              padding: 6px 12px;
+              background: #dc3545;
+              color: white;
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 14px;
+            }
+            .close-button:hover {
+              background: #c82333;
+            }
+            webview {
+              flex: 1;
+              width: 100%;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="toolbar">
+            <input type="text" class="url-bar" value="${url}" readonly>
+            <button class="close-button" onclick="window.close()">Close</button>
+          </div>
+          <webview src="${url}" allowpopups></webview>
+        </body>
+        </html>
+      `;
+      
+      // Load the HTML content
+      previewWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(previewHtml)}`);
+      
+      // Show the window
+      previewWindow.show();
+      
+    } catch (error) {
+      console.error('[ActionSuggestions] Error creating preview window:', error);
     }
   }
 }

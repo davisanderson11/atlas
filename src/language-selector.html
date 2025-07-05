@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Select Language</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: transparent;
+      user-select: none;
+      overflow: hidden;
+      -webkit-app-region: no-drag;
+    }
+
+    .language-selector {
+      background: rgba(30, 30, 30, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      overflow: hidden;
+      animation: slideIn 0.2s ease-out;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .selector-header {
+      padding: 10px 16px;
+      background: rgba(102, 126, 234, 0.1);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 12px;
+      color: #a0a0a0;
+      font-weight: 500;
+    }
+
+    .languages-list {
+      padding: 4px;
+    }
+
+    .language-item {
+      display: flex;
+      align-items: center;
+      padding: 10px 16px;
+      margin: 3px 4px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      color: #e0e0e0;
+      font-size: 14px;
+    }
+
+    .language-item:hover {
+      background: rgba(102, 126, 234, 0.2);
+      transform: translateX(2px);
+    }
+
+    .language-item:active {
+      transform: scale(0.98);
+    }
+
+    /* Scrollbar styling */
+    .language-selector::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .language-selector::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .language-selector::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+    }
+
+    .language-selector::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div class="language-selector" id="languageSelector">
+    <div class="selector-header">Select Target Language</div>
+    <div class="languages-list" id="languagesList">
+      <!-- Languages will be populated here -->
+    </div>
+  </div>
+
+  <script>
+    const languages = [
+      { code: 'es', name: 'Spanish' },
+      { code: 'fr', name: 'French' },
+      { code: 'de', name: 'German' },
+      { code: 'it', name: 'Italian' },
+      { code: 'pt', name: 'Portuguese' },
+      { code: 'ru', name: 'Russian' },
+      { code: 'ja', name: 'Japanese' },
+      { code: 'ko', name: 'Korean' },
+      { code: 'zh', name: 'Chinese (Simplified)' },
+      { code: 'zh-TW', name: 'Chinese (Traditional)' },
+      { code: 'ar', name: 'Arabic' },
+      { code: 'hi', name: 'Hindi' },
+      { code: 'nl', name: 'Dutch' },
+      { code: 'pl', name: 'Polish' },
+      { code: 'tr', name: 'Turkish' },
+      { code: 'vi', name: 'Vietnamese' },
+      { code: 'th', name: 'Thai' },
+      { code: 'id', name: 'Indonesian' },
+      { code: 'sv', name: 'Swedish' },
+      { code: 'da', name: 'Danish' },
+      { code: 'no', name: 'Norwegian' },
+      { code: 'fi', name: 'Finnish' }
+    ];
+
+    // Render languages
+    function renderLanguages() {
+      const languagesList = document.getElementById('languagesList');
+      languagesList.innerHTML = '';
+
+      languages.forEach(lang => {
+        const item = document.createElement('div');
+        item.className = 'language-item';
+        item.textContent = lang.name;
+        item.addEventListener('click', () => selectLanguage(lang));
+        languagesList.appendChild(item);
+      });
+    }
+
+    // Handle language selection
+    function selectLanguage(language) {
+      window.languageSelectorAPI.selectLanguage(language);
+    }
+
+    // Initialize
+    renderLanguages();
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        window.close();
+      }
+    });
+  </script>
+</body>
+</html>
