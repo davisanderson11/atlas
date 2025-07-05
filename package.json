@@ -8,9 +8,12 @@
     "start": "electron .",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
-    "build:win:optimized": "node scripts/optimize-build.js",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux",
+    "build:optimized": "node scripts/optimize-build.js",
+    "build:win:optimized": "node scripts/optimize-build.js --win",
+    "build:mac:optimized": "node scripts/optimize-build.js --mac",
+    "build:linux:optimized": "node scripts/optimize-build.js --linux",
     "dist": "electron-builder --publish=never",
     "clean": "rimraf dist node_modules/.cache"
   },
