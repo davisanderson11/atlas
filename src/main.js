@@ -807,11 +807,11 @@ app.whenReady().then(() => {
   
   // Listen for action chip triggers
   process.on('action-chip-trigger', async (content) => {
-    console.log('[Main] Action chip triggered summarization');
-    // Small delay to ensure clipboard is set
-    setTimeout(() => {
-      summarizeSelection();
-    }, 100);
+    console.log('[Main] Action chip triggered with content');
+    // Don't use summarizeSelection as it will clear clipboard
+    // Instead, directly create overlay with the content
+    originalSelectedText = content;
+    createOverlay(content);
   });
   
   // Monitor active window for privacy (only if rewind is enabled)

@@ -29,9 +29,24 @@ export class ActionSuggestionsHandler {
    * Clean up resources
    */
   async cleanup() {
+    console.log('[ActionSuggestions] Cleaning up resources');
+    
+    // Close action chip window if open
     if (this.actionChipWindow) {
-      this.actionChipWindow.close();
+      try {
+        if (!this.actionChipWindow.isDestroyed()) {
+          this.actionChipWindow.close();
+        }
+      } catch (e) {
+        console.error('[ActionSuggestions] Error closing window during cleanup:', e);
+      }
       this.actionChipWindow = null;
+    }
+    
+    // Clear any timeouts
+    if (this.hideTimeout) {
+      clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
     }
     
     if (this.mouseListener) {
@@ -39,6 +54,7 @@ export class ActionSuggestionsHandler {
       this.mouseListener = null;
     }
     
+    // Note: globalShortcut will be unregistered by main.js
     console.log('[ActionSuggestions] Cleaned up resources');
   }
 
@@ -58,17 +74,36 @@ export class ActionSuggestionsHandler {
       const shortcut = 'CommandOrControl+Shift+Space';
       
       const registered = globalShortcut.register(shortcut, async () => {
+        console.log('[ActionSuggestions] Shortcut triggered');
+        
+        // Check if action chip is already open
+        if (this.actionChipWindow && !this.actionChipWindow.isDestroyed()) {
+          console.log('[ActionSuggestions] Action chip already open, closing it');
+          this.actionChipWindow.close();
+          this.actionChipWindow = null;
+          return;
+        }
+        
         const selectedText = await this.getSelectedText();
         if (selectedText && selectedText.trim()) {
           console.log('[ActionSuggestions] Action triggered with text:', selectedText.substring(0, 50) + '...');
           
           const mousePos = screen.getCursorScreenPoint();
+          console.log('[ActionSuggestions] Mouse position:', mousePos);
+          
           const contentType = this.detectContentType(selectedText);
+          console.log('[ActionSuggestions] Content type:', contentType);
+          
           const actions = this.getActionsForType(contentType, selectedText);
+          console.log('[ActionSuggestions] Actions:', actions.length);
           
           if (actions.length > 0) {
             this.showActionChipAtPosition(actions, selectedText, mousePos.x, mousePos.y);
+          } else {
+            console.log('[ActionSuggestions] No actions available for this content type');
           }
+        } else {
+          console.log('[ActionSuggestions] No text selected');
         }
       });
       
@@ -225,14 +260,12 @@ export class ActionSuggestionsHandler {
         
       case 'text':
       default:
-        // Only show suggestions for substantial text
-        if (content.length > 50) {
-          actions.push(
-            { id: 'summarize-text', label: 'Summarize' },
-            { id: 'translate', label: 'Translate' },
-            { id: 'improve', label: 'Improve writing' }
-          );
-        }
+        // Show suggestions for any text
+        actions.push(
+          { id: 'summarize-text', label: 'Summarize' },
+          { id: 'translate', label: 'Translate' },
+          { id: 'improve', label: 'Improve writing' }
+        );
         break;
     }
     
@@ -256,6 +289,8 @@ export class ActionSuggestionsHandler {
    * Show action chip at specific position
    */
   showActionChipAtPosition(actions, content, x, y) {
+    console.log('[ActionSuggestions] showActionChipAtPosition called');
+    
     // Clear any existing hide timeout
     if (this.hideTimeout) {
       clearTimeout(this.hideTimeout);
@@ -263,8 +298,15 @@ export class ActionSuggestionsHandler {
     }
     
     // Close any existing action chip window
-    if (this.actionChipWindow && !this.actionChipWindow.isDestroyed()) {
-      this.actionChipWindow.close();
+    if (this.actionChipWindow) {
+      console.log('[ActionSuggestions] Closing existing action chip window');
+      try {
+        if (!this.actionChipWindow.isDestroyed()) {
+          this.actionChipWindow.close();
+        }
+      } catch (e) {
+        console.error('[ActionSuggestions] Error closing window:', e);
+      }
       this.actionChipWindow = null;
     }
     
@@ -389,10 +431,27 @@ export class ActionSuggestionsHandler {
     
     // Handle action selection
     const handleActionSelection = (event, actionId) => {
+      console.log('[ActionSuggestions] Action selected:', actionId);
       this.handleAction(actionId, content);
-      if (this.actionChipWindow && !this.actionChipWindow.isDestroyed()) {
-        this.actionChipWindow.close();
+      
+      // Ensure window is closed and reference is cleared
+      if (this.actionChipWindow) {
+        try {
+          if (!this.actionChipWindow.isDestroyed()) {
+            this.actionChipWindow.close();
+          }
+        } catch (e) {
+          console.error('[ActionSuggestions] Error closing window after action:', e);
+        }
+        this.actionChipWindow = null;
       }
+      
+      // Clear any hide timeout
+      if (this.hideTimeout) {
+        clearTimeout(this.hideTimeout);
+        this.hideTimeout = null;
+      }
+      
       // Remove the listener after handling
       ipcMain.removeListener('action-selected', handleActionSelection);
     };
@@ -408,8 +467,16 @@ export class ActionSuggestionsHandler {
     
     // Clean up on close
     this.actionChipWindow.on('closed', () => {
+      console.log('[ActionSuggestions] Action chip window closed');
       // Clear the reference when window is closed
       this.actionChipWindow = null;
+      
+      // Clear any hide timeout
+      if (this.hideTimeout) {
+        clearTimeout(this.hideTimeout);
+        this.hideTimeout = null;
+      }
+      
       // Remove any action selection listeners
       ipcMain.removeAllListeners('action-selected');
     });
@@ -503,10 +570,13 @@ export class ActionSuggestionsHandler {
    */
   async triggerAtlasSummarize(content) {
     try {
-      console.log('[ActionSuggestions] Triggering Atlas summarize');
+      console.log('[ActionSuggestions] Triggering Atlas summarize with content:', content.substring(0, 50) + '...');
       
-      // Set clipboard with content
+      // Make sure clipboard has the content
       clipboard.writeText(content);
+      
+      // Wait a bit to ensure clipboard is set
+      await new Promise(resolve => setTimeout(resolve, 50));
       
       // Emit a custom event that main.js can listen for
       process.emit('action-chip-trigger', content);
