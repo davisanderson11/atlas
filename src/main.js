@@ -801,9 +801,9 @@ app.whenReady().then(() => {
     }
   }
   
-  // Start Action Suggestions monitoring
-  console.log('[Action Suggestions] Starting clipboard monitoring');
-  actionSuggestionsHandler.startMonitoring();
+  // Initialize Action Suggestions
+  console.log('[Action Suggestions] Initializing context menu handler');
+  actionSuggestionsHandler.initialize();
   
   // Listen for action chip triggers
   process.on('action-chip-trigger', async (content) => {
@@ -849,8 +849,8 @@ app.on('will-quit', () => {
     rewindHandler.stopRecording();
   }
   
-  // Stop action suggestions monitoring
-  actionSuggestionsHandler.stopMonitoring();
+  // Clean up action suggestions
+  actionSuggestionsHandler.cleanup();
   
   // Clear privacy monitor
   if (privacyMonitorInterval) {

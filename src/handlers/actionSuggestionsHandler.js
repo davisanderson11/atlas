@@ -9,74 +9,157 @@ import { dirname, join } from 'path';
 export class ActionSuggestionsHandler {
   constructor(ai) {
     this.ai = ai;
-    this.lastClipboardContent = '';
     this.actionChipWindow = null;
-    this.monitoringInterval = null;
     this.hideTimeout = null;
+    this.mouseListener = null;
+    this.lastRightClickTime = 0;
   }
 
   /**
-   * Start monitoring clipboard for changes
+   * Initialize context menu handling
    */
-  startMonitoring() {
-    // Initialize with current clipboard content to avoid triggering on startup
-    this.lastClipboardContent = clipboard.readText();
-    console.log('[ActionSuggestions] Initialized with current clipboard content');
+  async initialize() {
+    console.log('[ActionSuggestions] Initializing right-click handler');
     
-    // Check clipboard every 500ms
-    this.monitoringInterval = setInterval(() => {
-      this.checkClipboard();
-    }, 500);
-    
-    console.log('[ActionSuggestions] Started clipboard monitoring');
+    // Set up mouse monitoring
+    await this.setupMouseMonitoring();
   }
 
   /**
-   * Stop monitoring clipboard
+   * Clean up resources
    */
-  stopMonitoring() {
-    if (this.monitoringInterval) {
-      clearInterval(this.monitoringInterval);
-      this.monitoringInterval = null;
-    }
-    
+  async cleanup() {
     if (this.actionChipWindow) {
       this.actionChipWindow.close();
       this.actionChipWindow = null;
     }
     
-    console.log('[ActionSuggestions] Stopped clipboard monitoring');
+    if (this.mouseListener) {
+      this.mouseListener.stop();
+      this.mouseListener = null;
+    }
+    
+    console.log('[ActionSuggestions] Cleaned up resources');
   }
 
   /**
-   * Check clipboard for changes
+   * Setup mouse monitoring for right clicks
    */
-  async checkClipboard() {
+  async setupMouseMonitoring() {
     try {
-      const currentContent = clipboard.readText();
+      const { mouse, Button } = await import('@nut-tree-fork/nut-js');
       
-      // Check if content has changed and is not empty
-      if (currentContent && currentContent !== this.lastClipboardContent) {
-        this.lastClipboardContent = currentContent;
-        console.log('[ActionSuggestions] New clipboard content detected:', currentContent.substring(0, 50) + '...');
-        
-        // Small delay to ensure the user has finished copying
-        setTimeout(() => {
-          // Analyze content and show suggestions
-          const contentType = this.detectContentType(currentContent);
-          console.log('[ActionSuggestions] Content type:', contentType);
+      console.log('[ActionSuggestions] Setting up mouse monitoring');
+      
+      // Monitor mouse clicks
+      mouse.on('click', async (button) => {
+        if (button === Button.RIGHT) {
+          console.log('[ActionSuggestions] Right click detected');
           
-          const actions = this.getActionsForType(contentType, currentContent);
-          
-          if (actions.length > 0) {
-            this.showActionChip(actions, currentContent);
+          // Debounce rapid clicks
+          const now = Date.now();
+          if (now - this.lastRightClickTime < 500) {
+            return;
           }
-        }, 200);
-      }
+          this.lastRightClickTime = now;
+          
+          // Small delay to let the context menu appear (if any)
+          setTimeout(async () => {
+            // Check if there's selected text
+            const selectedText = await this.getSelectedText();
+            if (selectedText && selectedText.trim()) {
+              console.log('[ActionSuggestions] Found selected text:', selectedText.substring(0, 50) + '...');
+              
+              // Get mouse position
+              const position = await mouse.getPosition();
+              this.showActionChipAtPosition(
+                this.getActionsForType(this.detectContentType(selectedText), selectedText),
+                selectedText,
+                position.x,
+                position.y
+              );
+            }
+          }, 100);
+        }
+      });
+      
+      console.log('[ActionSuggestions] Mouse monitoring started');
     } catch (error) {
-      console.error('[ActionSuggestions] Error checking clipboard:', error);
+      console.error('[ActionSuggestions] Error setting up mouse monitoring:', error);
+      
+      // Fallback to robotjs if nut-js fails
+      this.setupRobotjsMonitoring();
     }
   }
+  
+  /**
+   * Fallback mouse monitoring using robotjs
+   */
+  async setupRobotjsMonitoring() {
+    try {
+      const { createRequire } = await import('module');
+      const require = createRequire(import.meta.url);
+      const robot = require('@todesktop/robotjs-prebuild');
+      
+      // Since robotjs doesn't support right-click detection well,
+      // we'll use a modifier key approach
+      console.log('[ActionSuggestions] Robotjs fallback: Hold Shift and right-click to show actions');
+      
+      // Monitor for Shift key + mouse position
+      let shiftPressed = false;
+      
+      setInterval(async () => {
+        // Check if shift is pressed
+        // Unfortunately robotjs doesn't have good key state detection either
+        // So we'll need to rely on the nut-js approach primarily
+      }, 100);
+      
+    } catch (error) {
+      console.error('[ActionSuggestions] Robotjs fallback also failed:', error);
+    }
+  }
+  
+  /**
+   * Get currently selected text
+   */
+  async getSelectedText() {
+    try {
+      // Save current clipboard content
+      const originalClipboard = clipboard.readText();
+      
+      // Clear clipboard first
+      clipboard.clear();
+      
+      // Use dynamic import for ESM compatibility
+      const { createRequire } = await import('module');
+      const require = createRequire(import.meta.url);
+      const robot = require('@todesktop/robotjs-prebuild');
+      
+      // Send Ctrl+C / Cmd+C
+      if (process.platform === 'darwin') {
+        robot.keyTap('c', 'command');
+      } else {
+        robot.keyTap('c', 'control');
+      }
+      
+      // Wait a bit for the copy to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Get the selected text
+      const selectedText = clipboard.readText();
+      
+      // Restore original clipboard content
+      if (originalClipboard) {
+        clipboard.writeText(originalClipboard);
+      }
+      
+      return selectedText;
+    } catch (error) {
+      console.error('[ActionSuggestions] Error getting selected text:', error);
+      return '';
+    }
+  }
+
 
   /**
    * Detect the type of content in clipboard
@@ -198,7 +281,53 @@ export class ActionSuggestionsHandler {
   }
 
   /**
-   * Show action chip near cursor
+   * Show action chip at specific position
+   */
+  showActionChipAtPosition(actions, content, x, y) {
+    // Clear any existing hide timeout
+    if (this.hideTimeout) {
+      clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
+    }
+    
+    // Close any existing action chip window
+    if (this.actionChipWindow && !this.actionChipWindow.isDestroyed()) {
+      this.actionChipWindow.close();
+      this.actionChipWindow = null;
+    }
+    
+    // Get display info
+    const currentDisplay = screen.getDisplayNearestPoint({ x, y });
+    
+    // Calculate position (offset from cursor)
+    const chipWidth = 300;
+    const chipHeight = 50 + (actions.length * 40) + 10;
+    const offset = 10;
+    
+    let chipX = x + offset;
+    let chipY = y + offset;
+    
+    // Adjust if would go off screen
+    if (chipX + chipWidth > currentDisplay.bounds.x + currentDisplay.bounds.width) {
+      chipX = x - chipWidth - offset;
+    }
+    if (chipY + chipHeight > currentDisplay.bounds.y + currentDisplay.bounds.height) {
+      chipY = y - chipHeight - offset;
+    }
+    
+    // Create the window
+    this.createActionChipWindow(chipX, chipY, actions, content);
+    
+    // Auto-hide after 10 seconds
+    this.hideTimeout = setTimeout(() => {
+      if (this.actionChipWindow && !this.actionChipWindow.isDestroyed()) {
+        this.actionChipWindow.close();
+      }
+    }, 10000);
+  }
+
+  /**
+   * Show action chip near cursor (legacy method)
    */
   showActionChip(actions, content) {
     // Clear any existing hide timeout
