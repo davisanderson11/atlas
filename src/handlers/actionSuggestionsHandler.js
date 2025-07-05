@@ -47,77 +47,40 @@ export class ActionSuggestionsHandler {
    */
   async setupMouseMonitoring() {
     try {
-      const { mouse, Button } = await import('@nut-tree-fork/nut-js');
+      // For now, let's use a simpler approach with global shortcuts
+      // True mouse monitoring would require native modules compiled for the right architecture
+      console.log('[ActionSuggestions] Using alternative approach: Select text and use Ctrl+Right Click');
       
-      console.log('[ActionSuggestions] Setting up mouse monitoring');
+      const { globalShortcut } = await import('electron');
       
-      // Monitor mouse clicks
-      mouse.on('click', async (button) => {
-        if (button === Button.RIGHT) {
-          console.log('[ActionSuggestions] Right click detected');
+      // Register Ctrl+Right Click detection via a keyboard shortcut
+      // We'll monitor for a special key combination instead
+      const shortcut = 'CommandOrControl+Shift+Space';
+      
+      const registered = globalShortcut.register(shortcut, async () => {
+        const selectedText = await this.getSelectedText();
+        if (selectedText && selectedText.trim()) {
+          console.log('[ActionSuggestions] Action triggered with text:', selectedText.substring(0, 50) + '...');
           
-          // Debounce rapid clicks
-          const now = Date.now();
-          if (now - this.lastRightClickTime < 500) {
-            return;
+          const mousePos = screen.getCursorScreenPoint();
+          const contentType = this.detectContentType(selectedText);
+          const actions = this.getActionsForType(contentType, selectedText);
+          
+          if (actions.length > 0) {
+            this.showActionChipAtPosition(actions, selectedText, mousePos.x, mousePos.y);
           }
-          this.lastRightClickTime = now;
-          
-          // Small delay to let the context menu appear (if any)
-          setTimeout(async () => {
-            // Check if there's selected text
-            const selectedText = await this.getSelectedText();
-            if (selectedText && selectedText.trim()) {
-              console.log('[ActionSuggestions] Found selected text:', selectedText.substring(0, 50) + '...');
-              
-              // Get mouse position
-              const position = await mouse.getPosition();
-              this.showActionChipAtPosition(
-                this.getActionsForType(this.detectContentType(selectedText), selectedText),
-                selectedText,
-                position.x,
-                position.y
-              );
-            }
-          }, 100);
         }
       });
       
-      console.log('[ActionSuggestions] Mouse monitoring started');
-    } catch (error) {
-      console.error('[ActionSuggestions] Error setting up mouse monitoring:', error);
+      if (registered) {
+        console.log(`[ActionSuggestions] Registered shortcut: ${shortcut} for selected text actions`);
+      }
       
-      // Fallback to robotjs if nut-js fails
-      this.setupRobotjsMonitoring();
+    } catch (error) {
+      console.error('[ActionSuggestions] Error setting up monitoring:', error);
     }
   }
   
-  /**
-   * Fallback mouse monitoring using robotjs
-   */
-  async setupRobotjsMonitoring() {
-    try {
-      const { createRequire } = await import('module');
-      const require = createRequire(import.meta.url);
-      const robot = require('@todesktop/robotjs-prebuild');
-      
-      // Since robotjs doesn't support right-click detection well,
-      // we'll use a modifier key approach
-      console.log('[ActionSuggestions] Robotjs fallback: Hold Shift and right-click to show actions');
-      
-      // Monitor for Shift key + mouse position
-      let shiftPressed = false;
-      
-      setInterval(async () => {
-        // Check if shift is pressed
-        // Unfortunately robotjs doesn't have good key state detection either
-        // So we'll need to rely on the nut-js approach primarily
-      }, 100);
-      
-    } catch (error) {
-      console.error('[ActionSuggestions] Robotjs fallback also failed:', error);
-    }
-  }
   
   /**
    * Get currently selected text
@@ -127,36 +90,45 @@ export class ActionSuggestionsHandler {
       // Save current clipboard content
       const originalClipboard = clipboard.readText();
       
-      // Clear clipboard first
-      clipboard.clear();
-      
-      // Use dynamic import for ESM compatibility
-      const { createRequire } = await import('module');
-      const require = createRequire(import.meta.url);
-      const robot = require('@todesktop/robotjs-prebuild');
-      
-      // Send Ctrl+C / Cmd+C
-      if (process.platform === 'darwin') {
-        robot.keyTap('c', 'command');
-      } else {
-        robot.keyTap('c', 'control');
+      // Try using nut-js keyboard
+      try {
+        const { keyboard, Key } = await import('@nut-tree-fork/nut-js');
+        
+        // Clear clipboard
+        clipboard.clear();
+        
+        // Send copy command
+        if (process.platform === 'darwin') {
+          await keyboard.pressKey(Key.LeftCmd, Key.C);
+          await keyboard.releaseKey(Key.LeftCmd, Key.C);
+        } else {
+          await keyboard.pressKey(Key.LeftControl, Key.C);
+          await keyboard.releaseKey(Key.LeftControl, Key.C);
+        }
+        
+        // Wait for copy
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+      } catch (nutError) {
+        console.log('[ActionSuggestions] Nut-js keyboard failed, using clipboard directly');
+        // If nut-js fails, we'll just use whatever is in the clipboard
       }
-      
-      // Wait a bit for the copy to complete
-      await new Promise(resolve => setTimeout(resolve, 100));
       
       // Get the selected text
       const selectedText = clipboard.readText();
       
-      // Restore original clipboard content
-      if (originalClipboard) {
-        clipboard.writeText(originalClipboard);
+      // Restore original clipboard content if we changed it
+      if (selectedText !== originalClipboard && originalClipboard) {
+        setTimeout(() => {
+          clipboard.writeText(originalClipboard);
+        }, 200);
       }
       
       return selectedText;
     } catch (error) {
       console.error('[ActionSuggestions] Error getting selected text:', error);
-      return '';
+      // Last resort: return current clipboard content
+      return clipboard.readText();
     }
   }
 

@@ -50,7 +50,9 @@ After any AI response, you can:
   - Add notes and organize your captured moments
 
 ### Smart Action Chips (Beta)
-Select any text and right-click to see contextual actions:
+**Shortcut**: `Ctrl + Shift + Space` (Windows/Linux) or `Cmd + Shift + Space` (Mac)
+
+Select any text and press the shortcut to see contextual actions:
 - **For URLs**: Preview page, Summarize article, Extract images
 - **For Code**: Explain code, Optimize, Add comments, Convert to other languages
 - **For Text**: Summarize, Translate, Improve writing
