@@ -416,6 +416,19 @@ ipcMain.handle('rewind-process', async (_, question) => {
   }
 });
 
+// Action chip trigger handler
+ipcMain.handle('trigger-atlas-action', async (_, content) => {
+  console.log('[Action chip trigger] Content:', content.substring(0, 50) + '...');
+  
+  // Set clipboard and trigger summarization
+  clipboard.writeText(content);
+  
+  // Call summarizeSelection directly
+  await summarizeSelection();
+  
+  return true;
+});
+
 // Follow-up handler via IPC
 ipcMain.handle('overlay-followup', async (_, question) => {
   console.log('[Follow-up question]:', question);
@@ -791,6 +804,15 @@ app.whenReady().then(() => {
   // Start Action Suggestions monitoring
   console.log('[Action Suggestions] Starting clipboard monitoring');
   actionSuggestionsHandler.startMonitoring();
+  
+  // Listen for action chip triggers
+  process.on('action-chip-trigger', async (content) => {
+    console.log('[Main] Action chip triggered summarization');
+    // Small delay to ensure clipboard is set
+    setTimeout(() => {
+      summarizeSelection();
+    }, 100);
+  });
   
   // Monitor active window for privacy (only if rewind is enabled)
   if (config.features.rewind.enabled) {

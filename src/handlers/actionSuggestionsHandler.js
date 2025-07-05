@@ -19,6 +19,10 @@ export class ActionSuggestionsHandler {
    * Start monitoring clipboard for changes
    */
   startMonitoring() {
+    // Initialize with current clipboard content to avoid triggering on startup
+    this.lastClipboardContent = clipboard.readText();
+    console.log('[ActionSuggestions] Initialized with current clipboard content');
+    
     // Check clipboard every 500ms
     this.monitoringInterval = setInterval(() => {
       this.checkClipboard();
@@ -54,14 +58,20 @@ export class ActionSuggestionsHandler {
       // Check if content has changed and is not empty
       if (currentContent && currentContent !== this.lastClipboardContent) {
         this.lastClipboardContent = currentContent;
+        console.log('[ActionSuggestions] New clipboard content detected:', currentContent.substring(0, 50) + '...');
         
-        // Analyze content and show suggestions
-        const contentType = this.detectContentType(currentContent);
-        const actions = this.getActionsForType(contentType, currentContent);
-        
-        if (actions.length > 0) {
-          this.showActionChip(actions, currentContent);
-        }
+        // Small delay to ensure the user has finished copying
+        setTimeout(() => {
+          // Analyze content and show suggestions
+          const contentType = this.detectContentType(currentContent);
+          console.log('[ActionSuggestions] Content type:', contentType);
+          
+          const actions = this.getActionsForType(contentType, currentContent);
+          
+          if (actions.length > 0) {
+            this.showActionChip(actions, currentContent);
+          }
+        }, 200);
       }
     } catch (error) {
       console.error('[ActionSuggestions] Error checking clipboard:', error);
@@ -72,8 +82,8 @@ export class ActionSuggestionsHandler {
    * Detect the type of content in clipboard
    */
   detectContentType(content) {
-    // URL detection
-    const urlPattern = /^(https?:\/\/|www\.)[^\s]+$/i;
+    // URL detection - more comprehensive pattern
+    const urlPattern = /^(https?:\/\/)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&\/\/=]*)$/i;
     if (urlPattern.test(content.trim())) {
       return 'url';
     }
@@ -122,39 +132,39 @@ export class ActionSuggestionsHandler {
     switch (type) {
       case 'url':
         actions.push(
-          { id: 'preview', label: 'Preview page', icon: '🌐' },
-          { id: 'summarize', label: 'Summarize article', icon: '📄' },
-          { id: 'extract-images', label: 'Extract images', icon: '🖼️' }
+          { id: 'preview', label: 'Preview page' },
+          { id: 'summarize', label: 'Summarize article' },
+          { id: 'extract-images', label: 'Extract images' }
         );
         break;
         
       case 'code':
         actions.push(
-          { id: 'explain', label: 'Explain code', icon: '💡' },
-          { id: 'optimize', label: 'Optimize', icon: '⚡' },
-          { id: 'add-comments', label: 'Add comments', icon: '💬' }
+          { id: 'explain', label: 'Explain code' },
+          { id: 'optimize', label: 'Optimize' },
+          { id: 'add-comments', label: 'Add comments' }
         );
         
         // Detect language for translation suggestions
         if (this.detectLanguage(content) === 'javascript') {
-          actions.push({ id: 'to-python', label: 'Convert to Python', icon: '🐍' });
+          actions.push({ id: 'to-python', label: 'Convert to Python' });
         } else if (this.detectLanguage(content) === 'python') {
-          actions.push({ id: 'to-javascript', label: 'Convert to JavaScript', icon: '📜' });
+          actions.push({ id: 'to-javascript', label: 'Convert to JavaScript' });
         }
         break;
         
       case 'email':
         actions.push(
-          { id: 'compose', label: 'Compose email', icon: '✉️' },
-          { id: 'validate', label: 'Validate address', icon: '✓' }
+          { id: 'compose', label: 'Compose email' },
+          { id: 'validate', label: 'Validate address' }
         );
         break;
         
       case 'json':
         actions.push(
-          { id: 'format', label: 'Format JSON', icon: '🎨' },
-          { id: 'validate-json', label: 'Validate', icon: '✓' },
-          { id: 'to-yaml', label: 'Convert to YAML', icon: '📋' }
+          { id: 'format', label: 'Format JSON' },
+          { id: 'validate-json', label: 'Validate' },
+          { id: 'to-yaml', label: 'Convert to YAML' }
         );
         break;
         
@@ -163,9 +173,9 @@ export class ActionSuggestionsHandler {
         // Only show suggestions for substantial text
         if (content.length > 50) {
           actions.push(
-            { id: 'summarize-text', label: 'Summarize', icon: '📝' },
-            { id: 'translate', label: 'Translate', icon: '🌍' },
-            { id: 'improve', label: 'Improve writing', icon: '✨' }
+            { id: 'summarize-text', label: 'Summarize' },
+            { id: 'translate', label: 'Translate' },
+            { id: 'improve', label: 'Improve writing' }
           );
         }
         break;
@@ -194,6 +204,13 @@ export class ActionSuggestionsHandler {
     // Clear any existing hide timeout
     if (this.hideTimeout) {
       clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
+    }
+    
+    // Close any existing action chip window
+    if (this.actionChipWindow && !this.actionChipWindow.isDestroyed()) {
+      this.actionChipWindow.close();
+      this.actionChipWindow = null;
     }
     
     // Get cursor position
@@ -202,7 +219,7 @@ export class ActionSuggestionsHandler {
     
     // Calculate position (offset from cursor)
     const chipWidth = 300;
-    const chipHeight = 40 + (actions.length * 36); // Header + action items
+    const chipHeight = 50 + (actions.length * 40) + 10; // Header + action items + padding
     const offset = 20;
     
     let x = cursorPos.x + offset;
@@ -245,14 +262,15 @@ export class ActionSuggestionsHandler {
       x,
       y,
       width: 300,
-      height: 40 + (actions.length * 36),
+      height: 50 + (actions.length * 40) + 10,
       frame: false,
       transparent: true,
       alwaysOnTop: true,
       resizable: false,
       movable: false,
-      focusable: true,
+      focusable: true, // Need this for clicks to work
       skipTaskbar: true,
+      hasShadow: true,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -269,21 +287,40 @@ export class ActionSuggestionsHandler {
     });
     
     // Handle action selection
-    ipcMain.once('action-selected', (event, actionId) => {
+    const handleActionSelection = (event, actionId) => {
       this.handleAction(actionId, content);
       if (this.actionChipWindow && !this.actionChipWindow.isDestroyed()) {
         this.actionChipWindow.close();
       }
+      // Remove the listener after handling
+      ipcMain.removeListener('action-selected', handleActionSelection);
+    };
+    
+    // Remove any existing listeners first
+    ipcMain.removeAllListeners('action-selected');
+    
+    // Add the new listener
+    ipcMain.on('action-selected', handleActionSelection);
+    
+    // Make window clickable
+    this.actionChipWindow.setIgnoreMouseEvents(false);
+    
+    // Clean up on close
+    this.actionChipWindow.on('closed', () => {
+      // Clear the reference when window is closed
+      this.actionChipWindow = null;
+      // Remove any action selection listeners
+      ipcMain.removeAllListeners('action-selected');
     });
     
-    // Close on blur
-    this.actionChipWindow.on('blur', () => {
-      setTimeout(() => {
-        if (this.actionChipWindow && !this.actionChipWindow.isDestroyed()) {
-          this.actionChipWindow.close();
-        }
-      }, 100);
-    });
+    // Show the window with a slight delay to avoid focus issues
+    setTimeout(() => {
+      if (this.actionChipWindow && !this.actionChipWindow.isDestroyed()) {
+        this.actionChipWindow.show();
+        // Don't focus the window - let user continue working
+        this.actionChipWindow.blur();
+      }
+    }, 100);
   }
 
   /**
@@ -292,31 +329,101 @@ export class ActionSuggestionsHandler {
   async handleAction(actionId, content) {
     console.log(`[ActionSuggestions] Handling action: ${actionId}`);
     
-    // For now, we'll emit an event that the main window can handle
-    // In a full implementation, each action would have its specific handler
-    const mainWindow = BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.title === 'Atlas');
+    // Import shell for opening URLs
+    const { shell } = await import('electron');
     
-    if (mainWindow) {
-      mainWindow.webContents.send('action-suggestion-selected', {
-        actionId,
-        content,
-        timestamp: Date.now()
-      });
-    }
-    
-    // TODO: Implement specific handlers for each action type
+    // Implement specific handlers for each action type
     switch (actionId) {
+      case 'preview':
+        // Open URL in default browser
+        if (content.trim().match(/^(https?:\/\/|www\.)/i)) {
+          let url = content.trim();
+          if (!url.startsWith('http')) {
+            url = 'https://' + url;
+          }
+          console.log('[ActionSuggestions] Opening URL:', url);
+          shell.openExternal(url);
+        }
+        break;
+        
       case 'summarize':
       case 'summarize-text':
-        // Would open the main Atlas window with summarization request
+        // Trigger the main Atlas summarize function
+        this.triggerAtlasSummarize(content);
         break;
-      case 'preview':
-        // Would open a preview window for URLs
-        break;
+        
       case 'explain':
-        // Would explain the code
+        // Trigger Atlas with code explanation request
+        this.triggerAtlasAction('Explain this code:\n\n' + content);
         break;
-      // ... etc
+        
+      case 'optimize':
+        // Trigger Atlas with optimization request
+        this.triggerAtlasAction('Optimize this code for performance:\n\n' + content);
+        break;
+        
+      case 'add-comments':
+        // Trigger Atlas with comment request
+        this.triggerAtlasAction('Add helpful comments to this code:\n\n' + content);
+        break;
+        
+      case 'to-python':
+        // Trigger Atlas with translation request
+        this.triggerAtlasAction('Convert this JavaScript code to Python:\n\n' + content);
+        break;
+        
+      case 'to-javascript':
+        // Trigger Atlas with translation request
+        this.triggerAtlasAction('Convert this Python code to JavaScript:\n\n' + content);
+        break;
+        
+      case 'format':
+        // Trigger Atlas with format request
+        this.triggerAtlasAction('Format this JSON properly:\n\n' + content);
+        break;
+        
+      case 'translate':
+        // Trigger Atlas with translation request
+        this.triggerAtlasAction('Translate this text to English (or to Spanish if already in English):\n\n' + content);
+        break;
+        
+      case 'improve':
+        // Trigger Atlas with writing improvement request
+        this.triggerAtlasAction('Improve this writing (grammar, clarity, conciseness):\n\n' + content);
+        break;
+        
+      default:
+        console.log('[ActionSuggestions] Unknown action:', actionId);
+    }
+  }
+  
+  /**
+   * Trigger Atlas summarize function
+   */
+  async triggerAtlasSummarize(content) {
+    try {
+      console.log('[ActionSuggestions] Triggering Atlas summarize');
+      
+      // Set clipboard with content
+      clipboard.writeText(content);
+      
+      // Emit a custom event that main.js can listen for
+      process.emit('action-chip-trigger', content);
+      
+    } catch (error) {
+      console.error('[ActionSuggestions] Error triggering summarize:', error);
+    }
+  }
+  
+  /**
+   * Trigger Atlas with a specific action/prompt
+   */
+  async triggerAtlasAction(prompt) {
+    try {
+      // Same as summarize but with the prompt
+      await this.triggerAtlasSummarize(prompt);
+    } catch (error) {
+      console.error('[ActionSuggestions] Error triggering action:', error);
     }
   }
 }
