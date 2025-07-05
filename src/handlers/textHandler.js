@@ -1,6 +1,6 @@
 // Text selection handler module
 
-import { config } from '../config.js';
+import { config } from '../main/config.js';
 
 export class TextHandler {
   constructor(ai) {

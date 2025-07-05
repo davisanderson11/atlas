@@ -2,7 +2,7 @@
 // Monitors clipboard and suggests relevant actions based on content
 
 import { clipboard, BrowserWindow, screen, ipcMain } from 'electron';
-import { config } from '../config.js';
+import { config } from '../main/config.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -178,22 +178,36 @@ export class ActionSuggestionsHandler {
       return 'url';
     }
     
-    // Code detection (basic heuristics)
+    // Code detection - more strict to avoid false positives
     const codePatterns = [
-      /function\s+\w+\s*\(/,
-      /class\s+\w+/,
-      /const\s+\w+\s*=/,
-      /let\s+\w+\s*=/,
-      /var\s+\w+\s*=/,
-      /import\s+.*\s+from/,
-      /def\s+\w+\s*\(/,
-      /if\s*\(.+\)\s*{/,
-      /for\s*\(.+\)\s*{/,
-      /\w+\s*=\s*function/,
-      /export\s+(default\s+)?/
+      /function\s+\w+\s*\([^)]*\)\s*{/,  // function name() {
+      /const\s+\w+\s*=\s*(\([^)]*\)\s*=>|function)/,  // const x = () => or function
+      /let\s+\w+\s*=\s*(\([^)]*\)\s*=>|function)/,    // let x = () => or function
+      /class\s+\w+\s*(extends\s+\w+)?\s*{/,  // class Name {
+      /import\s+.*\s+from\s+['"`]/,  // import x from 'module'
+      /export\s+(default\s+)?(function|class|const|let)/,  // export function/class/const
+      /def\s+\w+\s*\([^)]*\)\s*:/,  // Python: def name():
+      /if\s*\([^)]+\)\s*{[\s\S]*}/,  // if (condition) { ... }
+      /for\s*\([^)]+\)\s*{/,  // for (...) {
+      /while\s*\([^)]+\)\s*{/,  // while (...) {
+      /\.(map|filter|reduce|forEach)\s*\(/,  // array methods
+      /=>\s*{/,  // arrow function with block
+      /```\w*\n/,  // markdown code block
     ];
     
-    if (codePatterns.some(pattern => pattern.test(content))) {
+    // Additional checks to ensure it's actually code
+    const hasMultipleCodeIndicators = () => {
+      let indicators = 0;
+      if (content.includes('{') && content.includes('}')) indicators++;
+      if (content.includes('(') && content.includes(')')) indicators++;
+      if (content.includes(';')) indicators++;
+      if (content.includes('=>')) indicators++;
+      if (/\b(function|const|let|var|class|if|for|while|return)\b/.test(content)) indicators++;
+      return indicators >= 2;
+    };
+    
+    // Check if it matches patterns AND has multiple indicators
+    if (codePatterns.some(pattern => pattern.test(content)) && hasMultipleCodeIndicators()) {
       return 'code';
     }
     
@@ -416,12 +430,12 @@ export class ActionSuggestionsHandler {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        preload: join(__dirname, '../action-chip-preload.js')
+        preload: join(__dirname, '../renderer/windows/action-chip/action-chip-preload.js')
       }
     });
     
     // Load the action chip HTML
-    this.actionChipWindow.loadFile(join(__dirname, '../action-chip.html'));
+    this.actionChipWindow.loadFile(join(__dirname, '../renderer/windows/action-chip/action-chip.html'));
     
     // Send actions once loaded
     this.actionChipWindow.webContents.once('did-finish-load', () => {
@@ -545,8 +559,18 @@ export class ActionSuggestionsHandler {
         break;
         
       case 'format':
-        // Trigger Atlas with format request
-        this.triggerAtlasAction('format-json', content);
+        // Format JSON locally for instant feedback
+        this.handleJSONFormat(content);
+        break;
+        
+      case 'validate-json':
+        // Validate JSON and show results
+        this.handleJSONValidate(content);
+        break;
+        
+      case 'to-yaml':
+        // Convert JSON to YAML
+        this.triggerAtlasAction('json-to-yaml', content);
         break;
         
       case 'translate':
@@ -564,6 +588,138 @@ export class ActionSuggestionsHandler {
     }
   }
   
+  /**
+   * Handle JSON formatting
+   */
+  handleJSONFormat(content) {
+    try {
+      // Parse the JSON
+      const parsed = JSON.parse(content);
+      
+      // Format with 2-space indentation
+      const formatted = JSON.stringify(parsed, null, 2);
+      
+      // Send formatted result
+      process.emit('action-chip-trigger', formatted);
+      
+    } catch (error) {
+      // If JSON is invalid, show error
+      const errorMsg = `JSON Format Error:\n\n${error.message}\n\nPlease fix the JSON syntax and try again.`;
+      process.emit('action-chip-trigger', errorMsg);
+    }
+  }
+  
+  /**
+   * Handle JSON validation
+   */
+  handleJSONValidate(content) {
+    try {
+      // Parse the JSON
+      const parsed = JSON.parse(content);
+      
+      // Analyze the structure
+      const analysis = this.analyzeJSON(parsed);
+      
+      // Create validation report
+      const report = `✅ Valid JSON\n\n${analysis}`;
+      
+      // Send result
+      process.emit('action-chip-trigger', report);
+      
+    } catch (error) {
+      // Parse error details
+      const match = error.message.match(/position (\d+)/);
+      const position = match ? parseInt(match[1]) : null;
+      
+      let errorReport = `❌ Invalid JSON\n\nError: ${error.message}`;
+      
+      if (position !== null) {
+        // Try to show where the error occurred
+        const lines = content.split('\n');
+        let currentPos = 0;
+        let errorLine = 0;
+        let errorCol = 0;
+        
+        for (let i = 0; i < lines.length; i++) {
+          if (currentPos + lines[i].length >= position) {
+            errorLine = i + 1;
+            errorCol = position - currentPos + 1;
+            break;
+          }
+          currentPos += lines[i].length + 1; // +1 for newline
+        }
+        
+        if (errorLine > 0) {
+          errorReport += `\n\nError location: Line ${errorLine}, Column ${errorCol}`;
+        }
+      }
+      
+      errorReport += '\n\nCommon issues:\n';
+      errorReport += '• Missing or extra commas\n';
+      errorReport += '• Unquoted keys or values\n';
+      errorReport += '• Mismatched brackets or braces\n';
+      errorReport += '• Invalid escape sequences';
+      
+      // Send error report
+      process.emit('action-chip-trigger', errorReport);
+    }
+  }
+  
+  /**
+   * Analyze JSON structure
+   */
+  analyzeJSON(obj, depth = 0) {
+    const stats = {
+      totalKeys: 0,
+      totalArrays: 0,
+      totalObjects: 0,
+      totalStrings: 0,
+      totalNumbers: 0,
+      totalBooleans: 0,
+      totalNulls: 0,
+      maxDepth: depth
+    };
+    
+    const analyze = (item, currentDepth) => {
+      if (currentDepth > stats.maxDepth) {
+        stats.maxDepth = currentDepth;
+      }
+      
+      if (Array.isArray(item)) {
+        stats.totalArrays++;
+        item.forEach(element => analyze(element, currentDepth + 1));
+      } else if (item !== null && typeof item === 'object') {
+        stats.totalObjects++;
+        const keys = Object.keys(item);
+        stats.totalKeys += keys.length;
+        keys.forEach(key => analyze(item[key], currentDepth + 1));
+      } else if (typeof item === 'string') {
+        stats.totalStrings++;
+      } else if (typeof item === 'number') {
+        stats.totalNumbers++;
+      } else if (typeof item === 'boolean') {
+        stats.totalBooleans++;
+      } else if (item === null) {
+        stats.totalNulls++;
+      }
+    };
+    
+    analyze(obj, depth);
+    
+    let report = 'Structure Analysis:\n';
+    report += `• Objects: ${stats.totalObjects}\n`;
+    report += `• Arrays: ${stats.totalArrays}\n`;
+    report += `• Total Keys: ${stats.totalKeys}\n`;
+    report += `• Max Depth: ${stats.maxDepth}\n\n`;
+    report += 'Data Types:\n';
+    report += `• Strings: ${stats.totalStrings}\n`;
+    report += `• Numbers: ${stats.totalNumbers}\n`;
+    report += `• Booleans: ${stats.totalBooleans}\n`;
+    report += `• Nulls: ${stats.totalNulls}`;
+    
+    return report;
+  }
+
   /**
    * Create preview window for URL
    */
@@ -731,12 +887,12 @@ export class ActionSuggestionsHandler {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        preload: join(__dirname, '../language-selector-preload.js')
+        preload: join(__dirname, '../renderer/windows/language-selector/language-selector-preload.js')
       }
     });
     
     // Load the language selector HTML
-    languageSelectorWindow.loadFile(join(__dirname, '../language-selector.html'));
+    languageSelectorWindow.loadFile(join(__dirname, '../renderer/windows/language-selector/language-selector.html'));
     
     // Handle language selection
     const handleLanguageSelection = (event, language) => {

@@ -19,13 +19,13 @@ import { mkdirSync, existsSync } from 'fs';
 // Import config and handlers
 import { config } from './config.js';
 import { settings } from './settings.js';
-import { TextHandler } from './handlers/textHandler.js';
-import { ScreenshotHandler } from './handlers/screenshotHandler.js';
-import { MathHandler } from './handlers/mathHandler.js';
-import { DataHandler } from './handlers/dataHandler.js';
-import { RewindHandler } from './handlers/rewindHandler.js';
-import { BookmarkHandler } from './handlers/bookmarkHandler.js';
-import { ActionSuggestionsHandler } from './handlers/actionSuggestionsHandler.js';
+import { TextHandler } from '../handlers/textHandler.js';
+import { ScreenshotHandler } from '../handlers/screenshotHandler.js';
+import { MathHandler } from '../handlers/mathHandler.js';
+import { DataHandler } from '../handlers/dataHandler.js';
+import { RewindHandler } from '../handlers/rewindHandler.js';
+import { BookmarkHandler } from '../handlers/bookmarkHandler.js';
+import { ActionSuggestionsHandler } from '../handlers/actionSuggestionsHandler.js';
 
 // Derive __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -124,7 +124,7 @@ function createOverlay(content) {
     movable: false,
     resizable: false,
     webPreferences: { 
-      preload: join(__dirname, 'preload.js'),
+      preload: join(__dirname, '../renderer/windows/overlay/preload.js'),
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -141,7 +141,7 @@ function createOverlay(content) {
   
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     console.log('[Overlay window created successfully]');
-    overlayWindow.loadFile(join(__dirname, 'index.html'));
+    overlayWindow.loadFile(join(__dirname, '../renderer/windows/overlay/index.html'));
     overlayWindow.webContents.once('did-finish-load', () => {
       console.log('[Sending content to overlay]:', typeof content === 'string' ? 'text' : content.type || 'visualization');
       if (overlayWindow && !overlayWindow.isDestroyed()) {
@@ -471,7 +471,7 @@ function createWelcomeWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: join(__dirname, 'welcome-preload.js')
+      preload: join(__dirname, '../renderer/windows/welcome/welcome-preload.js')
     },
     center: true,
     resizable: true,
@@ -484,7 +484,7 @@ function createWelcomeWindow() {
     backgroundColor: '#1a1a1a'
   });
 
-  welcomeWindow.loadFile(join(__dirname, 'welcome.html'));
+  welcomeWindow.loadFile(join(__dirname, '../renderer/windows/welcome/welcome.html'));
   
   welcomeWindow.once('ready-to-show', () => {
     welcomeWindow.show();
@@ -878,11 +878,16 @@ app.whenReady().then(() => {
           break;
           
         case 'format-json':
-          const formatResult = await ai.models.generateContent({
+          // This is now handled locally in actionSuggestionsHandler
+          result = 'JSON formatting handled locally';
+          break;
+          
+        case 'json-to-yaml':
+          const yamlResult = await ai.models.generateContent({
             model: config.ai.model,
-            contents: `Format this JSON properly:\n\n${content}`
+            contents: `Convert this JSON to YAML format:\n\n${content}`
           });
-          result = formatResult.text.trim();
+          result = yamlResult.text.trim();
           break;
           
         case 'translate':
@@ -1064,7 +1069,7 @@ function createStatus(message, type = 'info', duration = 3000) {
     resizable: false,
     focusable: false,
     webPreferences: {
-      preload: join(__dirname, 'status-preload.js'),
+      preload: join(__dirname, '../renderer/windows/status/status-preload.js'),
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -1072,7 +1077,7 @@ function createStatus(message, type = 'info', duration = 3000) {
   
   statusWindow.setIgnoreMouseEvents(true);
   
-  statusWindow.loadFile(join(__dirname, 'status.html'));
+  statusWindow.loadFile(join(__dirname, '../renderer/windows/status/status.html'));
   
   statusWindow.webContents.once('did-finish-load', () => {
     if (statusWindow && !statusWindow.isDestroyed()) {
@@ -1142,7 +1147,7 @@ async function showBookmarkViewer() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: join(__dirname, 'bookmarks-preload.js')
+      preload: join(__dirname, '../renderer/windows/bookmarks/bookmarks-preload.js')
     },
     center: true,
     resizable: true,
@@ -1155,7 +1160,7 @@ async function showBookmarkViewer() {
     backgroundColor: '#1a1a1a'
   });
   
-  bookmarkWindow.loadFile(join(__dirname, 'bookmarks.html'));
+  bookmarkWindow.loadFile(join(__dirname, '../renderer/windows/bookmarks/bookmarks.html'));
   
   bookmarkWindow.once('ready-to-show', () => {
     bookmarkWindow.show();

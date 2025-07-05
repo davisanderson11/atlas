@@ -5,7 +5,7 @@ import { Worker } from 'worker_threads';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { config } from '../config.js';
+import { config } from '../main/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

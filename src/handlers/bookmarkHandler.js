@@ -4,7 +4,7 @@ import { writeFile, readFile, mkdir, readdir, unlink } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
 import { existsSync } from 'fs';
-import { config } from '../config.js';
+import { config } from '../main/config.js';
 import { clipboard, desktopCapturer, screen } from 'electron';
 
 export class BookmarkHandler {

@@ -1,6 +1,6 @@
 // Math equation detection and solving handler module
 
-import { config } from '../config.js';
+import { config } from '../main/config.js';
 
 export class MathHandler {
   constructor(ai) {
