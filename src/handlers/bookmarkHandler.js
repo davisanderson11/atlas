@@ -62,6 +62,7 @@ export class BookmarkHandler {
         id: bookmarkId,
         timestamp,
         createdAt: new Date(timestamp).toISOString(),
+        displayName: '', // User-editable display name
         windows,
         activeWindowId,
         primaryScreenshot,
@@ -329,6 +330,9 @@ Keep the summary concise (3-4 sentences max) but comprehensive.`;
       }
       
       // Apply updates
+      if (updates.displayName !== undefined) {
+        bookmark.displayName = updates.displayName;
+      }
       if (updates.userNote !== undefined) {
         bookmark.userNote = updates.userNote;
       }

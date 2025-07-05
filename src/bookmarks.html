@@ -243,6 +243,37 @@
       color: #888;
     }
 
+    /* Display name editor */
+    .display-name-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .display-name-input {
+      flex: 1;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 18px;
+      font-weight: 500;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .display-name-input:focus {
+      border-color: #667eea;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .display-name-input::placeholder {
+      color: #666;
+      font-style: italic;
+    }
+
     /* Content Sections */
     .content-section {
       margin-bottom: 32px;
@@ -592,6 +623,13 @@
       <!-- Detail View -->
       <div class="detail-view" id="detailView">
         <div class="detail-header">
+          <div class="display-name-container">
+            <input type="text" 
+                   class="display-name-input" 
+                   id="displayNameInput" 
+                   placeholder="Add a name for this bookmark..."
+                   title="Click to edit bookmark name">
+          </div>
           <div class="detail-timestamp" id="detailTimestamp"></div>
           <div class="detail-date" id="detailDate"></div>
         </div>
@@ -746,9 +784,14 @@
         const timeStr = time.toLocaleTimeString();
         const dateStr = time.toLocaleDateString();
         
+        const displayText = bookmark.displayName || bookmark.aiContext || 'No context available';
+        const timeDisplay = bookmark.displayName ? 
+          `<div class="bookmark-time">${timeStr} - ${dateStr}</div>` : 
+          `<div class="bookmark-time">${timeStr} - ${dateStr}</div>`;
+        
         item.innerHTML = `
-          <div class="bookmark-time">${timeStr} - ${dateStr}</div>
-          <div class="bookmark-context">${bookmark.aiContext || 'No context available'}</div>
+          ${timeDisplay}
+          <div class="bookmark-context">${displayText}</div>
         `;
         
         item.addEventListener('click', () => selectBookmark(bookmark));
@@ -780,6 +823,9 @@
         month: 'long',
         day: 'numeric'
       });
+      
+      // Display name
+      document.getElementById('displayNameInput').value = bookmark.displayName || '';
       
       // Windows Explorer
       if (bookmark.windows && bookmark.windows.length > 0) {
@@ -1016,6 +1062,41 @@
       selectBookmark(e.detail);
     });
     
+    // Save display name on change
+    let displayNameTimeout;
+    document.getElementById('displayNameInput').addEventListener('input', (e) => {
+      if (!currentBookmarkId) return;
+      
+      clearTimeout(displayNameTimeout);
+      displayNameTimeout = setTimeout(async () => {
+        const displayName = e.target.value.trim();
+        await window.bookmarksAPI.updateBookmark(currentBookmarkId, { displayName });
+        
+        // Update local data and re-render list
+        const bookmark = bookmarks.find(b => b.id === currentBookmarkId);
+        if (bookmark) {
+          bookmark.displayName = displayName;
+          renderBookmarksList();
+          // Re-select to maintain selection
+          document.querySelector(`[data-bookmark-id="${currentBookmarkId}"]`)?.classList.add('selected');
+        }
+      }, 500); // Debounce 500ms
+    });
+
+    // Save notes button
+    document.getElementById('notesTextarea').addEventListener('blur', async () => {
+      if (!currentBookmarkId) return;
+      
+      const notes = document.getElementById('notesTextarea').value;
+      await window.bookmarksAPI.updateBookmark(currentBookmarkId, { userNote: notes });
+      
+      // Update local data
+      const bookmark = bookmarks.find(b => b.id === currentBookmarkId);
+      if (bookmark) {
+        bookmark.userNote = notes;
+      }
+    });
+
     // Initialize
     loadBookmarks();
   </script>
