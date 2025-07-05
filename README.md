@@ -49,6 +49,15 @@ After any AI response, you can:
   - Search through window titles, app names, and AI context
   - Add notes and organize your captured moments
 
+### Smart Action Chips (Beta)
+Atlas monitors your clipboard and automatically suggests relevant actions:
+- **For URLs**: Preview page, Summarize article, Extract images
+- **For Code**: Explain code, Optimize, Add comments, Convert to other languages
+- **For Text**: Summarize, Translate, Improve writing
+- **For JSON**: Format, Validate, Convert to YAML
+
+Simply copy any content and a small action chip will appear near your cursor with contextual suggestions. Click an action or press 1-9 for quick selection.
+
 ## Specialized Modes
 
 ### Math Mode

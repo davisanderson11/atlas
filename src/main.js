@@ -25,6 +25,7 @@ import { MathHandler } from './handlers/mathHandler.js';
 import { DataHandler } from './handlers/dataHandler.js';
 import { RewindHandler } from './handlers/rewindHandler.js';
 import { BookmarkHandler } from './handlers/bookmarkHandler.js';
+import { ActionSuggestionsHandler } from './handlers/actionSuggestionsHandler.js';
 
 // Derive __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -77,6 +78,7 @@ const mathHandler = new MathHandler(ai);
 const dataHandler = new DataHandler(ai);
 const rewindHandler = new RewindHandler(ai);
 const bookmarkHandler = new BookmarkHandler(ai);
+const actionSuggestionsHandler = new ActionSuggestionsHandler(ai);
 
 let overlayWindow;
 let welcomeWindow;
@@ -786,6 +788,10 @@ app.whenReady().then(() => {
     }
   }
   
+  // Start Action Suggestions monitoring
+  console.log('[Action Suggestions] Starting clipboard monitoring');
+  actionSuggestionsHandler.startMonitoring();
+  
   // Monitor active window for privacy (only if rewind is enabled)
   if (config.features.rewind.enabled) {
     privacyMonitorInterval = setInterval(() => {
@@ -820,6 +826,9 @@ app.on('will-quit', () => {
   if (config.features.rewind.enabled) {
     rewindHandler.stopRecording();
   }
+  
+  // Stop action suggestions monitoring
+  actionSuggestionsHandler.stopMonitoring();
   
   // Clear privacy monitor
   if (privacyMonitorInterval) {
