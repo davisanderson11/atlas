@@ -1,6 +1,6 @@
 {
   "name": "atlas",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "main": "src/main.js",
   "type": "module",
   "scripts": {
@@ -8,9 +8,11 @@
     "start": "electron .",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
+    "build:win:optimized": "node scripts/optimize-build.js",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux",
-    "dist": "electron-builder --publish=never"
+    "dist": "electron-builder --publish=never",
+    "clean": "rimraf dist node_modules/.cache"
   },
   "keywords": ["ai", "screenshot", "summarizer", "productivity"],
   "author": "",
@@ -40,7 +42,14 @@
       "package.json"
     ],
     "asar": true,
+    "asarUnpack": [
+      "**/node_modules/@todesktop/**",
+      "**/node_modules/@nut-tree-fork/**"
+    ],
     "compression": "maximum",
+    "electronLanguages": ["en", "en-US"],
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
     "extraFiles": [
       {
         "from": ".env",
@@ -60,7 +69,7 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64", "ia32"]
+          "arch": ["x64"]
         }
       ],
       "icon": "build/icon.ico"
@@ -76,7 +85,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "perMachine": true
+      "perMachine": true,
+      "packElevateHelper": false
     }
   }
 }
